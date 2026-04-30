@@ -1587,3 +1587,47 @@ a { text-decoration: none; color: inherit; }
   color: var(--text-1);
   font-weight: 600;
 }
+
+.about-modal-publish-box {
+  margin-top: 6px;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(96, 165, 250, .25);
+  background: linear-gradient(135deg, rgba(59,130,246,.1), rgba(6,182,212,.08));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.about-modal-publish-text h4 {
+  font-size: 14px;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.about-modal-publish-text h4 i {
+  color: var(--accent-blue-l);
+}
+.about-modal-publish-text p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+.system-modal-help {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+.system-modal-help strong {
+  color: var(--text-2);
+}
+
+@media (max-width: 640px) {
+  .about-modal-publish-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

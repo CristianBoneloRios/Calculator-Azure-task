@@ -24,6 +24,11 @@ const SHARED_PROFILE_PHOTO_CANDIDATES = [
   'assets/profile-photo.svg'
 ];
 
+const GITHUB_REPO_OWNER = 'CristianBoneloRios';
+const GITHUB_REPO_NAME = 'Calculator-Azure-task';
+const GITHUB_REPO_BRANCH = 'main';
+const GITHUB_PROFILE_PHOTO_PATH = 'assets/profile-photo.png';
+
 // ─────────────────────────────────────────
 // AZURE DEVOPS COLUMN MAPPING (EN + ES)
 // ─────────────────────────────────────────
@@ -87,6 +92,13 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.photoGuardError      = document.getElementById('photoGuardError');
   DOM.photoGuardCancelBtn  = document.getElementById('photoGuardCancelBtn');
   DOM.photoGuardConfirmBtn = document.getElementById('photoGuardConfirmBtn');
+  DOM.publishPhotoBtn      = document.getElementById('publishPhotoBtn');
+  DOM.githubPublishBackdrop = document.getElementById('githubPublishBackdrop');
+  DOM.githubPublishModal    = document.getElementById('githubPublishModal');
+  DOM.githubTokenInput      = document.getElementById('githubTokenInput');
+  DOM.githubPublishError    = document.getElementById('githubPublishError');
+  DOM.githubPublishCancelBtn = document.getElementById('githubPublishCancelBtn');
+  DOM.githubPublishConfirmBtn = document.getElementById('githubPublishConfirmBtn');
 
   const hasLocalPhoto = restoreAboutPhotoFromStorage();
   if (!hasLocalPhoto) {
@@ -137,6 +149,9 @@ function initEvents() {
     reader.readAsDataURL(file);
     e.target.value = '';
   });
+
+  // Publish profile photo globally (GitHub repo)
+  DOM.publishPhotoBtn.addEventListener('click', handlePublishPhotoToGithub);
 
   // File input
   DOM.selectFilesBtn.addEventListener('click', () => DOM.fileInput.click());
@@ -311,6 +326,145 @@ function loadSharedAboutPhoto() {
   };
 
   tryLoad(0);
+}
+
+async function handlePublishPhotoToGithub() {
+  const photoDataUrl = localStorage.getItem(ABOUT_PHOTO_STORAGE_KEY);
+  if (!photoDataUrl || !photoDataUrl.startsWith('data:image/')) {
+    showToast('Primero sube una foto desde este dispositivo para poder publicarla.', 'error');
+    return;
+  }
+
+  const token = await requestGithubToken();
+  if (!token) return;
+
+  try {
+    DOM.publishPhotoBtn.disabled = true;
+    DOM.publishPhotoBtn.classList.add('pulse');
+
+    // Normalize to PNG so the repo path stays fixed regardless of original filename/type.
+    const pngDataUrl = await convertImageDataUrlToPng(photoDataUrl);
+    const contentBase64 = pngDataUrl.split(',')[1];
+
+    const sha = await getRepoFileSha(token, GITHUB_PROFILE_PHOTO_PATH);
+    const body = {
+      message: 'Update shared profile photo from web app',
+      content: contentBase64,
+      branch: GITHUB_REPO_BRANCH
+    };
+    if (sha) body.sha = sha;
+
+    const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/contents/${GITHUB_PROFILE_PHOTO_PATH}`, {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const msg = err && err.message ? err.message : `Error HTTP ${response.status}`;
+      throw new Error(msg);
+    }
+
+    showToast('Foto publicada en GitHub. Quedara visible para todos tras el deploy.', 'success');
+  } catch (error) {
+    showToast(`No se pudo publicar la foto: ${error.message}`, 'error');
+  } finally {
+    DOM.publishPhotoBtn.disabled = false;
+    DOM.publishPhotoBtn.classList.remove('pulse');
+  }
+}
+
+async function getRepoFileSha(token, path) {
+  const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/contents/${path}?ref=${GITHUB_REPO_BRANCH}`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const msg = err && err.message ? err.message : `Error HTTP ${response.status}`;
+    throw new Error(msg);
+  }
+
+  const data = await response.json();
+  return data.sha || null;
+}
+
+function requestGithubToken() {
+  return new Promise(resolve => {
+    const onConfirm = () => {
+      const token = DOM.githubTokenInput.value.trim();
+      if (!token) {
+        DOM.githubPublishError.textContent = 'Debes ingresar un token de GitHub.';
+        DOM.githubTokenInput.focus();
+        return;
+      }
+      cleanup();
+      resolve(token);
+    };
+
+    const onCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    const onKeyDown = e => {
+      if (e.key === 'Enter') onConfirm();
+      if (e.key === 'Escape') onCancel();
+    };
+
+    const cleanup = () => {
+      DOM.githubPublishConfirmBtn.removeEventListener('click', onConfirm);
+      DOM.githubPublishCancelBtn.removeEventListener('click', onCancel);
+      DOM.githubPublishBackdrop.removeEventListener('click', onCancel);
+      document.removeEventListener('keydown', onKeyDown);
+
+      DOM.githubPublishBackdrop.classList.remove('active');
+      DOM.githubPublishModal.classList.remove('active');
+      DOM.githubPublishError.textContent = '';
+      DOM.githubTokenInput.value = '';
+      document.body.style.overflow = '';
+    };
+
+    DOM.githubPublishConfirmBtn.addEventListener('click', onConfirm);
+    DOM.githubPublishCancelBtn.addEventListener('click', onCancel);
+    DOM.githubPublishBackdrop.addEventListener('click', onCancel);
+    document.addEventListener('keydown', onKeyDown);
+
+    DOM.githubPublishBackdrop.classList.add('active');
+    DOM.githubPublishModal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    DOM.githubTokenInput.focus();
+  });
+}
+
+function convertImageDataUrlToPng(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('No se pudo convertir la imagen.'));
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Formato de imagen invalido.'));
+    img.src = dataUrl;
+  });
 }
 
 // ─────────────────────────────────────────
