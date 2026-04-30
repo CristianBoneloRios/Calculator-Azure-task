@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Azure Task Hours Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ═══════════════ HEADER ═══════════════ -->
+  <header class="app-header">
+    <div class="header-left">
+      <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Toggle Sidebar">
+        <i class="fas fa-bars"></i>
+      </button>
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="26" height="26">
+            <path d="M11.5 2L2 7.5V16.5L11.5 22L21 16.5V7.5L11.5 2Z" fill="url(#hexGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="0.5"/>
+            <path d="M7 9L11.5 6.5L16 9V15L11.5 17.5L7 15V9Z" fill="rgba(255,255,255,0.15)"/>
+            <path d="M11.5 6.5V17.5M7 9L16 15M16 9L7 15" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="hexGrad" x1="2" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#3b82f6"/>
+                <stop offset="100%" stop-color="#06b6d4"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Azure Task Hours</span>
+          <span class="brand-sub">CSV & Excel Analyzer</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="header-chips">
+        <span class="chip chip-blue"><i class="fas fa-file-csv"></i> CSV</span>
+        <span class="chip chip-green"><i class="fas fa-file-excel"></i> Excel</span>
+        <span class="chip chip-purple"><i class="fas fa-clock"></i> Hours</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="header-badge">
+        <i class="fas fa-chart-line"></i>
+        <span>Azure DevOps Analytics</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════ SIDEBAR OVERLAY ═══════════════ -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ═══════════════ LAYOUT ═══════════════ -->
+  <div class="app-layout">
+
+    <!-- ═══════════════ SIDEBAR ═══════════════ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-inner">
+
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <span class="nav-section-label">Navegación</span>
+            <a href="#upload-section" class="nav-item active" data-section="upload-section">
+              <span class="nav-icon"><i class="fas fa-cloud-upload-alt"></i></span>
+              <span class="nav-label">Cargar Archivos</span>
+            </a>
+            <a href="#results-section" class="nav-item" data-section="results-section">
+              <span class="nav-icon"><i class="fas fa-table"></i></span>
+              <span class="nav-label">Resultados</span>
+            </a>
+            <a href="#summary-section" class="nav-item" data-section="summary-section">
+              <span class="nav-icon"><i class="fas fa-chart-pie"></i></span>
+              <span class="nav-label">Estadísticas</span>
+            </a>
+          </div>
+
+          <div class="nav-section">
+            <span class="nav-section-label">Archivos Cargados</span>
+            <div class="file-history" id="fileHistory">
+              <div class="empty-history">
+                <i class="fas fa-inbox"></i>
+                <p>No hay archivos</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="nav-section">
+            <span class="nav-section-label">Acerca de</span>
+            <button class="about-me-btn" id="aboutMeBtn">
+              <div class="about-me-btn-avatar">
+                <img id="aboutMeAvatarThumb" src="" alt="" style="display:none"/>
+                <i class="fas fa-user" id="aboutMeAvatarIcon"></i>
+              </div>
+              <div class="about-me-btn-info">
+                <span class="about-me-btn-name">Cristian Bonelo Rios</span>
+                <span class="about-me-btn-role">Software Quality Analyst</span>
+              </div>
+              <i class="fas fa-arrow-right about-me-btn-arrow"></i>
+            </button>
+            <div class="sidebar-info-card">
+              <i class="fas fa-info-circle"></i>
+              <p>Soporta archivos exportados desde <strong>Azure DevOps</strong> en formato CSV y Excel (.xlsx, .xls).</p>
+            </div>
+            <div class="sidebar-info-card accent-green">
+              <i class="fas fa-lightbulb"></i>
+              <p>Detecta automáticamente columnas de <strong>horas completadas</strong>, <strong>estimación</strong> y <strong>trabajo restante</strong>.</p>
+            </div>
+          </div>
+        </nav>
+
+        <div class="sidebar-footer-brand">
+          <i class="fab fa-microsoft"></i>
+          <span>Azure DevOps Compatible</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══════════════ ABOUT ME MODAL ═══════════════ -->
+    <div class="about-modal-backdrop" id="aboutModalBackdrop"></div>
+    <div class="about-modal" id="aboutModal">
+      <button class="about-modal-close" id="aboutModalClose" title="Cerrar">
+        <i class="fas fa-times"></i>
+      </button>
+
+      <div class="about-modal-header">
+        <div class="about-modal-avatar-wrap">
+          <div class="about-modal-avatar" id="aboutModalAvatar">
+            <img id="aboutModalAvatarImg" src="" alt="Cristian Bonelo" style="display:none"/>
+            <i class="fas fa-user" id="aboutModalAvatarIcon"></i>
+          </div>
+          <label class="about-modal-avatar-edit" for="aboutPhotoInput" title="Cambiar foto">
+            <i class="fas fa-camera"></i>
+          </label>
+          <input type="file" id="aboutPhotoInput" accept="image/*" hidden />
+          <div class="about-modal-avatar-ring"></div>
+        </div>
+        <div class="about-modal-identity">
+          <h2>Cristian Jesus Bonelo Rios</h2>
+          <p class="about-modal-role">Software Quality Analyst – Development &amp; Innovation</p>
+          <p class="about-modal-company"><i class="fas fa-building"></i> Olimpia IT</p>
+          <div class="about-modal-tags">
+            <span><i class="fas fa-shield-alt"></i> QA</span>
+            <span><i class="fas fa-robot"></i> IA</span>
+            <span><i class="fas fa-infinity"></i> DevOps</span>
+            <span><i class="fas fa-lightbulb"></i> Innovación</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="about-modal-divider"></div>
+
+      <div class="about-modal-bio">
+        <p>
+          Soy <strong>Software Quality Analyst</strong> en <strong>Olimpia IT</strong>, con un fuerte enfoque en
+          desarrollo e innovación, especializado en la mejora continua y optimización de procesos de software.
+          Cuento con experiencia en la implementación de herramientas de <strong>inteligencia artificial</strong>
+          para automatizar, analizar y fortalecer los procesos de aseguramiento de la calidad, contribuyendo a
+          productos más eficientes, confiables y alineados con los objetivos del negocio.
+        </p>
+        <p>
+          Me destaco por el uso de herramientas de gestión de proyectos como <strong>Azure DevOps</strong>, las cuales
+          me permiten planificar, supervisar y optimizar el ciclo de vida del desarrollo de software, garantizando
+          trazabilidad, control de calidad y mejora constante. Mi enfoque analítico y orientado a resultados facilita
+          la identificación de oportunidades de optimización, la reducción de riesgos y la adopción de buenas
+          prácticas dentro de los equipos de trabajo.
+        </p>
+        <p>
+          Estoy comprometido con la <strong>excelencia técnica</strong>, la <strong>innovación continua</strong> y la
+          entrega de soluciones de alto valor, aportando activamente a la transformación digital y al fortalecimiento
+          de los procesos organizacionales en Olimpia IT.
+        </p>
+      </div>
+    </div>
+
+    <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
+    <main class="main-content" id="mainContent">
+
+      <!-- Upload Section -->
+      <section class="content-section" id="upload-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fas fa-cloud-upload-alt"></i> Cargar Archivos</h2>
+            <p>Sube tus archivos CSV o Excel exportados desde Azure DevOps para calcular las horas de tus tareas.</p>
+          </div>
+        </div>
+
+        <div class="upload-zone" id="uploadZone">
+          <div class="upload-zone-content">
+            <div class="upload-animation">
+              <div class="upload-circle">
+                <i class="fas fa-file-upload"></i>
+              </div>
+              <div class="upload-ripple"></div>
+              <div class="upload-ripple delay-1"></div>
+            </div>
+            <h3>Arrastra y suelta tus archivos aquí</h3>
+            <p>o haz clic en el botón para seleccionarlos</p>
+            <div class="upload-formats">
+              <span><i class="fas fa-file-csv"></i> .CSV</span>
+              <span><i class="fas fa-file-excel"></i> .XLSX</span>
+              <span><i class="fas fa-file-excel"></i> .XLS</span>
+            </div>
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" multiple hidden />
+            <button class="btn btn-primary btn-lg" id="selectFilesBtn">
+              <i class="fas fa-folder-open"></i> Seleccionar Archivos
+            </button>
+          </div>
+          <div class="upload-drag-overlay">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Suelta los archivos aquí</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Stats Section -->
+      <section class="stats-section" id="summary-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fas fa-chart-bar"></i> Resumen Global</h2>
+            <p>Estadísticas consolidadas de todos los archivos analizados.</p>
+          </div>
+          <div class="section-actions">
+            <button class="btn btn-danger btn-sm" id="clearAllBtn">
+              <i class="fas fa-trash-alt"></i> Limpiar Todo
+            </button>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card stat-blue">
+            <div class="stat-card-icon"><i class="fas fa-file-alt"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statFiles">0</span>
+              <span class="stat-label">Archivos Analizados</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-file-alt"></i></div>
+          </div>
+
+          <div class="stat-card stat-cyan">
+            <div class="stat-card-icon"><i class="fas fa-tasks"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statTasks">0</span>
+              <span class="stat-label">Tareas Totales</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-tasks"></i></div>
+          </div>
+
+          <div class="stat-card stat-green">
+            <div class="stat-card-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statCompleted">0h</span>
+              <span class="stat-label">Horas Completadas</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-check-circle"></i></div>
+          </div>
+
+          <div class="stat-card stat-orange">
+            <div class="stat-card-icon"><i class="fas fa-stopwatch"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statEstimate">0h</span>
+              <span class="stat-label">Estimación Original</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-stopwatch"></i></div>
+          </div>
+
+          <div class="stat-card stat-purple">
+            <div class="stat-card-icon"><i class="fas fa-hourglass-half"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statRemaining">0h</span>
+              <span class="stat-label">Horas Restantes</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-hourglass-half"></i></div>
+          </div>
+
+          <div class="stat-card stat-pink">
+            <div class="stat-card-icon"><i class="fas fa-percentage"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statProgress">0%</span>
+              <span class="stat-label">Progreso General</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-percentage"></i></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Results Section -->
+      <section class="content-section" id="results-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fas fa-table"></i> Resultados por Archivo</h2>
+            <p>Detalle de horas y tareas por cada archivo cargado.</p>
+          </div>
+        </div>
+
+        <div class="results-empty-state" id="resultsEmptyState">
+          <i class="fas fa-folder-open"></i>
+          <h3>Aun no hay resultados para mostrar</h3>
+          <p>Carga archivos CSV o Excel para ver el analisis de horas por tarea y por archivo.</p>
+        </div>
+        <div id="fileResultsContainer"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Toast notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Password Modal for Photo Change -->
+  <div class="system-modal-backdrop" id="photoGuardBackdrop"></div>
+  <div class="system-modal" id="photoGuardModal" role="dialog" aria-modal="true" aria-labelledby="photoGuardTitle">
+    <div class="system-modal-header">
+      <div class="system-modal-icon"><i class="fas fa-lock"></i></div>
+      <div>
+        <h3 id="photoGuardTitle">Foto Protegida</h3>
+        <p>Ingresa la clave para cambiar la foto de perfil.</p>
+      </div>
+    </div>
+    <div class="system-modal-body">
+      <label for="photoGuardInput">Clave de acceso</label>
+      <input id="photoGuardInput" type="password" inputmode="numeric" autocomplete="off" placeholder="Ingresa la clave" />
+      <div class="system-modal-error" id="photoGuardError"></div>
+    </div>
+    <div class="system-modal-actions">
+      <button class="btn btn-outline" id="photoGuardCancelBtn">Cancelar</button>
+      <button class="btn btn-primary" id="photoGuardConfirmBtn">Confirmar</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ FOOTER ═══════════════ -->
+  <footer class="app-footer">
+    <div class="footer-content">
+      <div class="footer-left">
+        <i class="fas fa-code"></i>
+      </div>
+      <div class="footer-center">
+        <span class="footer-powered">Powered by</span>
+        <span class="footer-name">Cristian Jesus Bonelo Rios</span>
+        <span class="footer-sep">|</span>
+        <span class="footer-role">SOFTWARE QUALITY ANALYST</span>
+        <span class="footer-sep">|</span>
+        <span class="footer-dept">DEVELOPMENT &amp; INNOVATION</span>
+      </div>
+      <div class="footer-right">
+        <span class="footer-version">v1.0.0</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- External Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
