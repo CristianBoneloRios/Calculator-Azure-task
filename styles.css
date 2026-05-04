@@ -1607,7 +1607,7 @@ a { text-decoration: none; color: inherit; }
   background: rgba(0,120,212,.15);
   color: #0078d4;
 }
-}
+
 @keyframes ringRotate {
   to { transform: rotate(360deg); }
 }
