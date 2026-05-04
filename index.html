@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%233b82f6' width='100' height='100'/><text x='50' y='70' font-size='60' font-weight='bold' fill='white' text-anchor='middle'>\u03A3</text></svg>" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -211,16 +212,22 @@
               <div class="upload-ripple delay-1"></div>
             </div>
             <h3>Arrastra y suelta tus archivos aquí</h3>
-            <p>o haz clic en el botón para seleccionarlos</p>
+            <p>o elige una opción para cargar</p>
             <div class="upload-formats">
               <span><i class="fas fa-file-csv"></i> .CSV</span>
               <span><i class="fas fa-file-excel"></i> .XLSX</span>
               <span><i class="fas fa-file-excel"></i> .XLS</span>
             </div>
             <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" multiple hidden />
-            <button class="btn btn-primary btn-lg" id="selectFilesBtn">
-              <i class="fas fa-folder-open"></i> Seleccionar Archivos
-            </button>
+            <div class="upload-button-group">
+              <button class="btn btn-primary btn-lg" id="selectFilesBtn">
+                <i class="fas fa-folder-open"></i> Seleccionar Archivos
+              </button>
+              <span class="upload-divider">o</span>
+              <button class="btn btn-azure btn-lg" id="connectAzureBtn">
+                <i class="fab fa-microsoft"></i> Conectar Azure DevOps
+              </button>
+            </div>
           </div>
           <div class="upload-drag-overlay">
             <i class="fas fa-cloud-upload-alt"></i>
@@ -333,11 +340,11 @@
         <p>Ingresa la clave para cambiar la foto de perfil.</p>
       </div>
     </div>
-    <div class="system-modal-body">
+    <form class="system-modal-body" onsubmit="return false;">
       <label for="photoGuardInput">Clave de acceso</label>
       <input id="photoGuardInput" type="password" inputmode="numeric" autocomplete="off" placeholder="Ingresa la clave" />
       <div class="system-modal-error" id="photoGuardError"></div>
-    </div>
+    </form>
     <div class="system-modal-actions">
       <button class="btn btn-outline" id="photoGuardCancelBtn">Cancelar</button>
       <button class="btn btn-primary" id="photoGuardConfirmBtn">Confirmar</button>
@@ -353,15 +360,64 @@
         <p>Ingresa un token con permiso de escritura al repositorio.</p>
       </div>
     </div>
-    <div class="system-modal-body">
+    <form class="system-modal-body" onsubmit="return false;">
       <label for="githubTokenInput">GitHub Token (Contents: Read and Write)</label>
-      <input id="githubTokenInput" type="password" autocomplete="off" placeholder="ghp_..." />
+      <input id="githubTokenInput" type="password" autocomplete="off" placeholder="github_pat_..." />
       <div class="system-modal-help">Se guardara como <strong>assets/profile-photo.png</strong> en la rama <strong>main</strong>.</div>
       <div class="system-modal-error" id="githubPublishError"></div>
-    </div>
+    </form>
     <div class="system-modal-actions">
       <button class="btn btn-outline" id="githubPublishCancelBtn">Cancelar</button>
       <button class="btn btn-primary" id="githubPublishConfirmBtn">Publicar</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ AZURE DEVOPS MODAL ═══════════════ -->
+  <div class="system-modal-backdrop" id="azureConnectBackdrop"></div>
+  <div class="system-modal" id="azureConnectModal" role="dialog" aria-modal="true" aria-labelledby="azureConnectTitle">
+    <div class="system-modal-header">
+      <div class="system-modal-icon" style="color: #0078d4;"><i class="fab fa-microsoft"></i></div>
+      <div>
+        <h3 id="azureConnectTitle">Conectar Azure DevOps</h3>
+        <p>Ingresa tus credenciales para traer tareas automáticamente.</p>
+      </div>
+    </div>
+    <form class="system-modal-body" onsubmit="return false;">
+      <label for="azureOrgInput">Organización de Azure DevOps</label>
+      <input id="azureOrgInput" type="text" autocomplete="off" placeholder="ej: https://dev.azure.com/mi-organizacion" />
+      
+      <label for="azureProjectInput">Nombre del Proyecto</label>
+      <input id="azureProjectInput" type="text" autocomplete="off" placeholder="ej: Mi Proyecto" />
+      
+      <label for="azurePatInput">Personal Access Token (PAT)</label>
+      <input id="azurePatInput" type="password" autocomplete="off" placeholder="Pega tu PAT aquí" />
+      
+      <div class="system-modal-help">
+        <strong>🔐 Tu PAT es seguro:</strong> Se guarda solo en este navegador. Nunca se envía a servidores externos.
+      </div>
+      <div class="system-modal-error" id="azureConnectError"></div>
+    </form>
+    <div class="system-modal-actions">
+      <button class="btn btn-outline" id="azureConnectCancelBtn">Cancelar</button>
+      <button class="btn btn-primary" id="azureConnectConfirmBtn">Conectar</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ AZURE LOADING MODAL ═══════════════ -->
+  <div class="system-modal-backdrop" id="azureLoadingBackdrop" style="display: none;"></div>
+  <div class="system-modal" id="azureLoadingModal" role="dialog" aria-modal="true" style="display: none;">
+    <div class="system-modal-header">
+      <div class="system-modal-icon azure-loading-spinner"><i class="fab fa-microsoft"></i></div>
+      <div>
+        <h3>Cargando Tareas de Azure</h3>
+        <p id="azureLoadingStatus">Obteniendo información...</p>
+      </div>
+    </div>
+    <div class="system-modal-body" style="text-align: center;">
+      <div class="loading-progress-bar">
+        <div class="loading-progress-fill"></div>
+      </div>
+      <p style="margin-top: 10px; color: var(--text-2);" id="azureLoadingText">Esto puede tomar un momento...</p>
     </div>
   </div>
 

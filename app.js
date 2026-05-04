@@ -13,6 +13,14 @@ const AppState = {
   files: []   // { id, name, ext, rows, headers, colMap, summary }
 };
 
+// Azure DevOps Configuration
+const AzureConfig = {
+  orgUrl: null,
+  pat: null,
+  project: null,
+  isConnected: false
+};
+
 const ABOUT_PHOTO_STORAGE_KEY = 'about_profile_photo_dataurl';
 const ABOUT_PHOTO_LOCK_KEY = 'about_profile_photo_locked';
 const ABOUT_PHOTO_CHANGE_PASSWORD = '580622';
@@ -28,6 +36,28 @@ const GITHUB_REPO_OWNER = 'CristianBoneloRios';
 const GITHUB_REPO_NAME = 'Calculator-Azure-task';
 const GITHUB_REPO_BRANCH = 'main';
 const GITHUB_PROFILE_PHOTO_PATH = 'assets/profile-photo.png';
+
+// ─────────────────────────────────────────
+// SAFE LOCALSTORAGE HELPERS
+// ─────────────────────────────────────────
+function safeGetItem(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.warn('localStorage unavailable:', e.message);
+    return null;
+  }
+}
+
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    console.warn('localStorage unavailable:', e.message);
+    return false;
+  }
+}
 
 // ─────────────────────────────────────────
 // AZURE DEVOPS COLUMN MAPPING (EN + ES)
@@ -100,10 +130,26 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.githubPublishCancelBtn = document.getElementById('githubPublishCancelBtn');
   DOM.githubPublishConfirmBtn = document.getElementById('githubPublishConfirmBtn');
 
+  // Azure DevOps DOM elements
+  DOM.connectAzureBtn       = document.getElementById('connectAzureBtn');
+  DOM.azureConnectBackdrop  = document.getElementById('azureConnectBackdrop');
+  DOM.azureConnectModal     = document.getElementById('azureConnectModal');
+  DOM.azureOrgInput         = document.getElementById('azureOrgInput');
+  DOM.azureProjectInput     = document.getElementById('azureProjectInput');
+  DOM.azurePatInput         = document.getElementById('azurePatInput');
+  DOM.azureConnectError     = document.getElementById('azureConnectError');
+  DOM.azureConnectCancelBtn = document.getElementById('azureConnectCancelBtn');
+  DOM.azureConnectConfirmBtn= document.getElementById('azureConnectConfirmBtn');
+  DOM.azureLoadingBackdrop  = document.getElementById('azureLoadingBackdrop');
+  DOM.azureLoadingModal     = document.getElementById('azureLoadingModal');
+  DOM.azureLoadingStatus    = document.getElementById('azureLoadingStatus');
+  DOM.azureLoadingText      = document.getElementById('azureLoadingText');
+
   const hasLocalPhoto = restoreAboutPhotoFromStorage();
   if (!hasLocalPhoto) {
     loadSharedAboutPhoto();
   }
+  restoreAzureConnection();
   initEvents();
   updateGlobalStats();
   updateFileHistory();
@@ -156,6 +202,9 @@ function initEvents() {
   // File input
   DOM.selectFilesBtn.addEventListener('click', () => DOM.fileInput.click());
   DOM.fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+  // Azure DevOps connection
+  DOM.connectAzureBtn.addEventListener('click', openAzureConnectModal);
 
   // Drag & drop
   DOM.uploadZone.addEventListener('dragover',  e => { e.preventDefault(); DOM.uploadZone.classList.add('drag-over'); });
@@ -295,24 +344,24 @@ function applyAboutPhoto(src) {
 }
 
 function persistAboutPhoto(src) {
-  localStorage.setItem(ABOUT_PHOTO_STORAGE_KEY, src);
-  localStorage.setItem(ABOUT_PHOTO_LOCK_KEY, 'true');
+  safeSetItem(ABOUT_PHOTO_STORAGE_KEY, src);
+  safeSetItem(ABOUT_PHOTO_LOCK_KEY, 'true');
 }
 
 function restoreAboutPhotoFromStorage() {
-  const storedPhoto = localStorage.getItem(ABOUT_PHOTO_STORAGE_KEY);
+  const storedPhoto = safeGetItem(ABOUT_PHOTO_STORAGE_KEY);
   if (!storedPhoto) return false;
   applyAboutPhoto(storedPhoto);
 
   // Keep compatibility if photo existed before lock flag was created.
-  if (!localStorage.getItem(ABOUT_PHOTO_LOCK_KEY)) {
-    localStorage.setItem(ABOUT_PHOTO_LOCK_KEY, 'true');
+  if (!safeGetItem(ABOUT_PHOTO_LOCK_KEY)) {
+    safeSetItem(ABOUT_PHOTO_LOCK_KEY, 'true');
   }
   return true;
 }
 
 function isAboutPhotoLocked() {
-  return localStorage.getItem(ABOUT_PHOTO_LOCK_KEY) === 'true';
+  return safeGetItem(ABOUT_PHOTO_LOCK_KEY) === 'true';
 }
 
 function loadSharedAboutPhoto() {
@@ -329,7 +378,7 @@ function loadSharedAboutPhoto() {
 }
 
 async function handlePublishPhotoToGithub() {
-  const photoDataUrl = localStorage.getItem(ABOUT_PHOTO_STORAGE_KEY);
+  const photoDataUrl = safeGetItem(ABOUT_PHOTO_STORAGE_KEY);
   if (!photoDataUrl || !photoDataUrl.startsWith('data:image/')) {
     showToast('Primero sube una foto desde este dispositivo para poder publicarla.', 'error');
     return;
@@ -366,7 +415,16 @@ async function handlePublishPhotoToGithub() {
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      const msg = err && err.message ? err.message : `Error HTTP ${response.status}`;
+      let msg = `Error HTTP ${response.status}`;
+      if (response.status === 401) {
+        msg = 'Token inválido o expirado. Revisa que lo copiaste correctamente.';
+      } else if (response.status === 403) {
+        msg = 'El token no tiene permisos suficientes. Asegúrate de seleccionar "repo" al crear el token.';
+      } else if (response.status === 422) {
+        msg = 'Error de validación. Verifica que el repositorio y la rama existen.';
+      } else if (err && err.message) {
+        msg = err.message;
+      }
       throw new Error(msg);
     }
 
@@ -390,7 +448,14 @@ async function getRepoFileSha(token, path) {
   if (response.status === 404) return null;
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    const msg = err && err.message ? err.message : `Error HTTP ${response.status}`;
+    let msg = `Error HTTP ${response.status}`;
+    if (response.status === 401) {
+      msg = 'Token inválido o expirado. Revisa que lo copiaste correctamente.';
+    } else if (response.status === 403) {
+      msg = 'El token no tiene permisos suficientes. Asegúrate de seleccionar "repo" al crear el token.';
+    } else if (err && err.message) {
+      msg = err.message;
+    }
     throw new Error(msg);
   }
 
@@ -404,6 +469,16 @@ function requestGithubToken() {
       const token = DOM.githubTokenInput.value.trim();
       if (!token) {
         DOM.githubPublishError.textContent = 'Debes ingresar un token de GitHub.';
+        DOM.githubTokenInput.focus();
+        return;
+      }
+      if (token.includes(' ') || token.includes('\n')) {
+        DOM.githubPublishError.textContent = '⚠️ El token tiene espacios. Revisa que lo copiaste correctamente.';
+        DOM.githubTokenInput.focus();
+        return;
+      }
+      if (!token.startsWith('github_pat_') && !token.startsWith('ghp_')) {
+        DOM.githubPublishError.textContent = '⚠️ El token no parece válido. Debe empezar con github_pat_ o ghp_';
         DOM.githubTokenInput.focus();
         return;
       }
@@ -1025,4 +1100,229 @@ function escHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// ─────────────────────────────────────────
+// AZURE DEVOPS INTEGRATION
+// ─────────────────────────────────────────
+function openAzureConnectModal() {
+  const savedOrg = safeGetItem('azure_org') || '';
+  const savedProject = safeGetItem('azure_project') || '';
+
+  DOM.azureOrgInput.value = savedOrg;
+  DOM.azureProjectInput.value = savedProject;
+  DOM.azurePatInput.value = '';
+  DOM.azureConnectError.textContent = '';
+
+  const onConfirm = () => {
+    const org = DOM.azureOrgInput.value.trim();
+    const project = DOM.azureProjectInput.value.trim();
+    const pat = DOM.azurePatInput.value.trim();
+
+    // Validation
+    if (!org || !project || !pat) {
+      DOM.azureConnectError.textContent = '⚠️ Todos los campos son requeridos.';
+      return;
+    }
+
+    // Extract org name from URL if user pasted full URL
+    const orgMatch = org.match(/dev\.azure\.com\/([^\/]+)/);
+    const cleanOrg = orgMatch ? orgMatch[1] : org;
+
+    if (!cleanOrg.match(/^[a-zA-Z0-9_-]+$/)) {
+      DOM.azureConnectError.textContent = '⚠️ Nombre de organización inválido.';
+      return;
+    }
+
+    if (pat.includes(' ') || pat.includes('\n')) {
+      DOM.azureConnectError.textContent = '⚠️ El PAT tiene espacios. Revisa que lo copiaste correctamente.';
+      return;
+    }
+
+    // Save credentials
+    AzureConfig.orgUrl = `https://dev.azure.com/${cleanOrg}`;
+    AzureConfig.project = project;
+    AzureConfig.pat = pat;
+    AzureConfig.isConnected = true;
+
+    safeSetItem('azure_org', cleanOrg);
+    safeSetItem('azure_project', project);
+    safeSetItem('azure_pat_enc', btoa(pat)); // Basic encryption
+
+    cleanup();
+    fetchAzureWorkItems();
+  };
+
+  const onCancel = () => {
+    cleanup();
+  };
+
+  const onKeyDown = e => {
+    if (e.key === 'Enter') onConfirm();
+    if (e.key === 'Escape') onCancel();
+  };
+
+  const cleanup = () => {
+    DOM.azureConnectConfirmBtn.removeEventListener('click', onConfirm);
+    DOM.azureConnectCancelBtn.removeEventListener('click', onCancel);
+    DOM.azureConnectBackdrop.removeEventListener('click', onCancel);
+    document.removeEventListener('keydown', onKeyDown);
+
+    DOM.azureConnectBackdrop.classList.remove('active');
+    DOM.azureConnectModal.classList.remove('active');
+    document.body.style.overflow = '';
+  };
+
+  DOM.azureConnectConfirmBtn.addEventListener('click', onConfirm);
+  DOM.azureConnectCancelBtn.addEventListener('click', onCancel);
+  DOM.azureConnectBackdrop.addEventListener('click', onCancel);
+  document.addEventListener('keydown', onKeyDown);
+
+  DOM.azureConnectBackdrop.classList.add('active');
+  DOM.azureConnectModal.classList.add('active');
+  document.body.style.overflow = 'hidden';
+  DOM.azureOrgInput.focus();
+}
+
+function showAzureLoadingModal(message = 'Obteniendo tareas...') {
+  DOM.azureLoadingStatus.textContent = message;
+  DOM.azureLoadingText.textContent = 'Esto puede tomar un momento...';
+  DOM.azureLoadingBackdrop.style.display = '';
+  DOM.azureLoadingModal.style.display = '';
+  document.body.style.overflow = 'hidden';
+}
+
+function hideAzureLoadingModal() {
+  DOM.azureLoadingBackdrop.style.display = 'none';
+  DOM.azureLoadingModal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function fetchAzureWorkItems() {
+  if (!AzureConfig.isConnected) {
+    showToast('Azure no está conectado.', 'error');
+    return;
+  }
+
+  showAzureLoadingModal('Obteniendo tareas de Azure DevOps...');
+
+  try {
+    // Build WIQL query to get work items with hours
+    const wiqlQuery = `Select [System.Id], [System.Title], [System.WorkItemType], [System.State], 
+                       [Microsoft.VSTS.Scheduling.OriginalEstimate], 
+                       [Microsoft.VSTS.Scheduling.CompletedWork], 
+                       [Microsoft.VSTS.Scheduling.RemainingWork],
+                       [System.AssignedTo], [System.Tags], [System.AreaPath], [System.IterationPath]
+                       From WorkItems Where [System.TeamProject] = '${AzureConfig.project}'`;
+
+    const auth = btoa(`:${AzureConfig.pat}`);
+    const response = await fetch(`${AzureConfig.orgUrl}/${AzureConfig.project}/_apis/wit/wiql?api-version=7.0`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query: wiqlQuery })
+    });
+
+    if (!response.ok) {
+      let errorMsg = `Error ${response.status}`;
+      if (response.status === 401) {
+        errorMsg = 'PAT inválido o expirado. Revisa tus credenciales.';
+      } else if (response.status === 403) {
+        errorMsg = 'Acceso denegado. Verifica los permisos de tu PAT.';
+      } else if (response.status === 404) {
+        errorMsg = 'Proyecto no encontrado. Revisa el nombre del proyecto.';
+      }
+      throw new Error(errorMsg);
+    }
+
+    const data = await response.json();
+    if (!data.workItems || data.workItems.length === 0) {
+      hideAzureLoadingModal();
+      showToast('No se encontraron tareas en el proyecto.', 'info');
+      return;
+    }
+
+    // Get work item details
+    DOM.azureLoadingStatus.textContent = `Procesando ${data.workItems.length} tareas...`;
+
+    const workItemIds = data.workItems.map(wi => wi.id).join(',');
+    const detailResponse = await fetch(
+      `${AzureConfig.orgUrl}/_apis/wit/workitems?ids=${workItemIds}&$expand=all&api-version=7.0`,
+      {
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!detailResponse.ok) throw new Error('Error fetching work item details');
+
+    const detailData = await detailResponse.json();
+    const rows = convertAzureWorkItemsToRows(detailData.value);
+
+    hideAzureLoadingModal();
+    processAzureData(rows);
+
+  } catch (error) {
+    hideAzureLoadingModal();
+    showToast(`Error: ${error.message}`, 'error');
+    console.error('Azure fetch error:', error);
+  }
+}
+
+function convertAzureWorkItemsToRows(workItems) {
+  const rows = [];
+
+  workItems.forEach(wi => {
+    const fields = wi.fields || {};
+    
+    const row = {
+      'ID': fields['System.Id'] || '',
+      'Título': fields['System.Title'] || '',
+      'Tipo': fields['System.WorkItemType'] || '',
+      'Estado': fields['System.State'] || '',
+      'Asignado a': fields['System.AssignedTo']?.displayName || '',
+      'Estimación Original': fields['Microsoft.VSTS.Scheduling.OriginalEstimate'] || 0,
+      'Trabajo Completado': fields['Microsoft.VSTS.Scheduling.CompletedWork'] || 0,
+      'Trabajo Restante': fields['Microsoft.VSTS.Scheduling.RemainingWork'] || 0,
+      'Etiquetas': fields['System.Tags'] || '',
+      'Ruta de Área': fields['System.AreaPath'] || '',
+      'Iteración': fields['System.IterationPath'] || ''
+    };
+
+    rows.push(row);
+  });
+
+  return rows;
+}
+
+function processAzureData(rows) {
+  if (!rows || rows.length === 0) {
+    showToast('No hay datos para procesar.', 'info');
+    return;
+  }
+
+  const headers = Object.keys(rows[0]);
+  const fileName = `Azure-${AzureConfig.project}-${new Date().toISOString().split('T')[0]}.json`;
+
+  processData(fileName, 'azure', headers, rows);
+  showToast(`✓ ${rows.length} tareas cargadas desde Azure DevOps`, 'success');
+  showResultsAndStats();
+}
+
+// Restore Azure connection if it exists
+function restoreAzureConnection() {
+  const org = safeGetItem('azure_org');
+  const project = safeGetItem('azure_project');
+  const pat_enc = safeGetItem('azure_pat_enc');
+
+  if (org && project && pat_enc) {
+    AzureConfig.orgUrl = `https://dev.azure.com/${org}`;
+    AzureConfig.project = project;
+    AzureConfig.pat = atob(pat_enc);
+    AzureConfig.isConnected = true;
+  }
 }
