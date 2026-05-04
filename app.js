@@ -136,8 +136,10 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.azureOrgInput         = document.getElementById('azureOrgInput');
   DOM.azureProjectInput     = document.getElementById('azureProjectInput');
   DOM.azurePatInput         = document.getElementById('azurePatInput');
+  DOM.azurePatServerStatus  = document.getElementById('azurePatServerStatus');
   DOM.azureConnectError     = document.getElementById('azureConnectError');
   DOM.azureConnectCancelBtn = document.getElementById('azureConnectCancelBtn');
+  DOM.azureDeletePatBtn     = document.getElementById('azureDeletePatBtn');
   DOM.azureConnectConfirmBtn= document.getElementById('azureConnectConfirmBtn');
   DOM.azureLoadingBackdrop  = document.getElementById('azureLoadingBackdrop');
   DOM.azureLoadingModal     = document.getElementById('azureLoadingModal');
@@ -1111,7 +1113,10 @@ function openAzureConnectModal() {
   DOM.azureOrgInput.value = savedOrg;
   DOM.azureProjectInput.value = savedProject;
   DOM.azurePatInput.value = '';
+  DOM.azurePatServerStatus.textContent = 'Estado PAT servidor: verificando...';
   DOM.azureConnectError.textContent = '';
+
+  checkServerPatStatus();
 
   const onConfirm = () => {
     const org = DOM.azureOrgInput.value.trim();
@@ -1119,8 +1124,8 @@ function openAzureConnectModal() {
     const pat = DOM.azurePatInput.value.trim();
 
     // Validation
-    if (!org || !project || !pat) {
-      DOM.azureConnectError.textContent = 'Todos los campos son requeridos.';
+    if (!org || !project) {
+      DOM.azureConnectError.textContent = 'Organización y proyecto son requeridos.';
       return;
     }
 
@@ -1133,7 +1138,7 @@ function openAzureConnectModal() {
       return;
     }
 
-    if (pat.includes(' ') || pat.includes('\n')) {
+    if (pat && (pat.includes(' ') || pat.includes('\n'))) {
       DOM.azureConnectError.textContent = '⚠️ El PAT tiene espacios. Revisa que lo copiaste correctamente.';
       return;
     }
@@ -1150,6 +1155,32 @@ function openAzureConnectModal() {
     fetchAzureWorkItems();
   };
 
+  const onDeletePat = async () => {
+    DOM.azureConnectError.textContent = '';
+    const confirmed = window.confirm('¿Seguro que deseas borrar el PAT guardado en el servidor?');
+    if (!confirmed) return;
+
+    try {
+      DOM.azureDeletePatBtn.disabled = true;
+
+      const response = await callAzureBackend({ action: 'delete_pat' });
+      if (!response || response.ok !== true) {
+        const msg = response && response.message
+          ? response.message
+          : 'No se pudo borrar el PAT del servidor.';
+        throw new Error(msg);
+      }
+
+      DOM.azurePatInput.value = '';
+      DOM.azurePatServerStatus.textContent = 'Estado PAT servidor: no configurado.';
+      showToast('PAT borrado del servidor correctamente.', 'success');
+    } catch (error) {
+      DOM.azureConnectError.textContent = error.message;
+    } finally {
+      DOM.azureDeletePatBtn.disabled = false;
+    }
+  };
+
   const onCancel = () => {
     cleanup();
   };
@@ -1161,6 +1192,7 @@ function openAzureConnectModal() {
 
   const cleanup = () => {
     DOM.azureConnectConfirmBtn.removeEventListener('click', onConfirm);
+    DOM.azureDeletePatBtn.removeEventListener('click', onDeletePat);
     DOM.azureConnectCancelBtn.removeEventListener('click', onCancel);
     DOM.azureConnectBackdrop.removeEventListener('click', onCancel);
     document.removeEventListener('keydown', onKeyDown);
@@ -1171,6 +1203,7 @@ function openAzureConnectModal() {
   };
 
   DOM.azureConnectConfirmBtn.addEventListener('click', onConfirm);
+  DOM.azureDeletePatBtn.addEventListener('click', onDeletePat);
   DOM.azureConnectCancelBtn.addEventListener('click', onCancel);
   DOM.azureConnectBackdrop.addEventListener('click', onCancel);
   document.addEventListener('keydown', onKeyDown);
@@ -1212,6 +1245,39 @@ function normalizeAzureProjectName(projectName) {
   return value;
 }
 
+async function callAzureBackend(payload) {
+  const backendResponse = await fetch('api/azure.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await backendResponse.json().catch(() => null);
+  if (!backendResponse.ok || !data) {
+    const msg = data && data.message
+      ? data.message
+      : `Error ${backendResponse.status}. Respuesta invalida del backend.`;
+    throw new Error(msg);
+  }
+
+  return data;
+}
+
+async function checkServerPatStatus() {
+  try {
+    const response = await callAzureBackend({ action: 'status' });
+    if (response.hasPat) {
+      DOM.azurePatServerStatus.textContent = 'Estado PAT servidor: configurado.';
+    } else {
+      DOM.azurePatServerStatus.textContent = 'Estado PAT servidor: no configurado.';
+    }
+  } catch (_) {
+    DOM.azurePatServerStatus.textContent = 'Estado PAT servidor: no se pudo verificar.';
+  }
+}
+
 async function fetchAzureWorkItems() {
   if (!AzureConfig.isConnected) {
     showToast('Azure no está conectado.', 'error');
@@ -1222,26 +1288,20 @@ async function fetchAzureWorkItems() {
 
   try {
     const projectName = normalizeAzureProjectName(AzureConfig.project);
+    const pat = DOM.azurePatInput ? DOM.azurePatInput.value.trim() : '';
 
     DOM.azureLoadingStatus.textContent = 'Consultando backend de Azure...';
 
-    const backendResponse = await fetch('api/azure.php', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        org: AzureConfig.orgUrl.replace('https://dev.azure.com/', '').trim(),
-        project: projectName,
-        pat: DOM.azurePatInput ? DOM.azurePatInput.value.trim() : ''
-      })
+    const payload = await callAzureBackend({
+      org: AzureConfig.orgUrl.replace('https://dev.azure.com/', '').trim(),
+      project: projectName,
+      pat
     });
 
-    const payload = await backendResponse.json().catch(() => null);
-    if (!backendResponse.ok || !payload || payload.ok !== true) {
+    if (!payload || payload.ok !== true) {
       const msg = payload && payload.message
         ? payload.message
-        : `Error ${backendResponse.status}. No se pudo obtener respuesta valida del backend.`;
+        : 'No se pudo obtener respuesta valida del backend.';
       throw new Error(msg);
     }
 

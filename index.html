@@ -391,14 +391,21 @@
 
       <label for="azurePatInput">Personal Access Token (PAT)</label>
       <input id="azurePatInput" type="password" autocomplete="off" placeholder="Pega tu PAT aquí" />
+
+      <div class="system-modal-help" id="azurePatServerStatus">
+        Estado PAT servidor: verificando...
+      </div>
       
       <div class="system-modal-help">
-        El PAT se envia una vez al backend y se guarda en servidor para futuras conexiones.
+        Si dejas el PAT vacio, se intentara usar el PAT ya guardado en servidor.
       </div>
       <div class="system-modal-error" id="azureConnectError"></div>
     </form>
     <div class="system-modal-actions">
       <button class="btn btn-outline" id="azureConnectCancelBtn">Cancelar</button>
+      <button class="btn btn-danger" id="azureDeletePatBtn" type="button">
+        <i class="fas fa-trash-alt"></i> Borrar PAT Servidor
+      </button>
       <button class="btn btn-primary" id="azureConnectConfirmBtn">Conectar</button>
     </div>
   </div>

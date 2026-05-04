@@ -34,6 +34,24 @@ if (!is_array($payload)) {
     respondError(400, 'Body JSON invalido.');
 }
 
+$action = trim((string) ($payload['action'] ?? 'fetch'));
+
+if ($action === 'status') {
+    respondOk([
+        'hasPat' => getServerPat() !== ''
+    ]);
+}
+
+if ($action === 'delete_pat') {
+    if (!deleteServerPat()) {
+        respondError(500, 'No se pudo borrar el PAT del servidor.');
+    }
+
+    respondOk([
+        'message' => 'PAT eliminado del servidor.'
+    ]);
+}
+
 $org = trim((string) ($payload['org'] ?? ''));
 $project = normalizeProjectName((string) ($payload['project'] ?? ''));
 $incomingPat = trim((string) ($payload['pat'] ?? ''));
@@ -236,6 +254,16 @@ function readServerPat(): string
     }
 
     return trim($value);
+}
+
+function deleteServerPat(): bool
+{
+    $path = getPatStoragePath();
+    if (!is_file($path)) {
+        return true;
+    }
+
+    return @unlink($path);
 }
 
 function azureRequest(string $url, string $method, ?array $body, array $headers): array
