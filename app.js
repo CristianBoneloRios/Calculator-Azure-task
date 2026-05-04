@@ -1207,16 +1207,18 @@ async function fetchAzureWorkItems() {
   showAzureLoadingModal('Obteniendo tareas de Azure DevOps...');
 
   try {
-    // Build WIQL query to get work items with hours
-    const wiqlQuery = `Select [System.Id], [System.Title], [System.WorkItemType], [System.State], 
-                       [Microsoft.VSTS.Scheduling.OriginalEstimate], 
-                       [Microsoft.VSTS.Scheduling.CompletedWork], 
-                       [Microsoft.VSTS.Scheduling.RemainingWork],
-                       [System.AssignedTo], [System.Tags], [System.AreaPath], [System.IterationPath]
-                       From WorkItems Where [System.TeamProject] = '${AzureConfig.project}'`;
+    const projectPath = encodeURIComponent(AzureConfig.project);
+
+    // Use @project to avoid WIQL parsing issues with project names containing spaces/special chars.
+    const wiqlQuery = [
+      'SELECT [System.Id]',
+      'FROM WorkItems',
+      'WHERE [System.TeamProject] = @project',
+      'ORDER BY [System.ChangedDate] DESC'
+    ].join(' ');
 
     const auth = btoa(`:${AzureConfig.pat}`);
-    const response = await fetch(`${AzureConfig.orgUrl}/${AzureConfig.project}/_apis/wit/wiql?api-version=7.0`, {
+    const response = await fetch(`${AzureConfig.orgUrl}/${projectPath}/_apis/wit/wiql?api-version=7.0`, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${auth}`,
@@ -1227,12 +1229,21 @@ async function fetchAzureWorkItems() {
 
     if (!response.ok) {
       let errorMsg = `Error ${response.status}`;
+      const errBody = await response.json().catch(() => null);
+      const azureMsg = errBody && typeof errBody.message === 'string'
+        ? errBody.message
+        : '';
+
       if (response.status === 401) {
         errorMsg = 'PAT inválido o expirado. Revisa tus credenciales.';
       } else if (response.status === 403) {
         errorMsg = 'Acceso denegado. Verifica los permisos de tu PAT.';
       } else if (response.status === 404) {
         errorMsg = 'Proyecto no encontrado. Revisa el nombre del proyecto.';
+      } else if (response.status === 400) {
+        errorMsg = azureMsg
+          ? `Consulta WIQL inválida: ${azureMsg}`
+          : 'Consulta WIQL inválida. Revisa proyecto, permisos y tipo de proceso en Azure DevOps.';
       }
       throw new Error(errorMsg);
     }
