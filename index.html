@@ -229,6 +229,16 @@
               </button>
             </div>
           </div>
+          <!-- Azure connected strip: shown when connected -->
+          <div class="azure-connected-strip" id="azureConnectedStrip" style="display:none">
+            <div class="azure-strip-info">
+              <i class="fab fa-microsoft"></i>
+              <span>Azure DevOps conectado &mdash; <strong id="azureConnectedProject"></strong></span>
+            </div>
+            <button class="btn btn-azure btn-sm" id="azureShowTasksBtn">
+              <i class="fas fa-tasks"></i> <span id="azureShowTasksBtnLabel">Mostrar tareas</span>
+            </button>
+          </div>
           <div class="upload-drag-overlay">
             <i class="fas fa-cloud-upload-alt"></i>
             <span>Suelta los archivos aquí</span>
@@ -237,6 +247,69 @@
       </section>
 
       <!-- Stats Section -->
+
+      <!-- Azure Tasks Section -->
+      <section class="content-section azure-tasks-section" id="azureTasksSection" style="display:none">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fab fa-microsoft"></i> Tareas de Azure DevOps</h2>
+            <p id="azureTasksSummaryText">Cargando tareas...</p>
+          </div>
+          <div class="section-actions">
+            <button class="btn btn-azure btn-sm" id="azureReloadBtn">
+              <i class="fas fa-sync-alt"></i> Recargar
+            </button>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="azure-filters">
+          <div class="azure-filter-group">
+            <label for="azureFilterUser"><i class="fas fa-user"></i> Usuario</label>
+            <input type="text" id="azureFilterUser" placeholder="Nombre o correo..." autocomplete="off" />
+          </div>
+          <div class="azure-filter-group">
+            <label for="azureFilterState"><i class="fas fa-tag"></i> Estado</label>
+            <select id="azureFilterState">
+              <option value="">Todos los estados</option>
+            </select>
+          </div>
+          <div class="azure-filter-actions">
+            <button class="btn btn-primary btn-sm" id="azureApplyFilterBtn">
+              <i class="fas fa-filter"></i> Filtrar
+            </button>
+            <button class="btn btn-outline btn-sm" id="azureResetFilterBtn">
+              <i class="fas fa-times"></i> Limpiar
+            </button>
+          </div>
+        </div>
+
+        <!-- Skeleton loader -->
+        <div class="azure-skeleton" id="azureSkeleton" style="display:none">
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line"></div>
+        </div>
+
+        <!-- Task count badge -->
+        <div class="azure-results-meta" id="azureResultsMeta" style="display:none">
+          <span id="azureResultsCount"></span>
+        </div>
+
+        <!-- Results table -->
+        <div id="azureTasksResults"></div>
+
+        <!-- No results after filtering -->
+        <div class="azure-empty" id="azureTasksEmpty" style="display:none">
+          <i class="fas fa-search"></i>
+          <p>No se encontraron tareas con los filtros aplicados.</p>
+        </div>
+      </section>
+
       <section class="stats-section" id="summary-section">
         <div class="section-header">
           <div class="section-title-group">

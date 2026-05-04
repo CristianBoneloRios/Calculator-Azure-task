@@ -20,6 +20,12 @@ const AzureConfig = {
   isConnected: false
 };
 
+// Azure runtime state (in-memory + sessionStorage)
+const AzureState = {
+  rows: []  // raw rows from last successful fetch
+};
+const AZURE_ROWS_SESSION_KEY = 'azure_rows_cache';
+
 const ABOUT_PHOTO_STORAGE_KEY = 'about_profile_photo_dataurl';
 const ABOUT_PHOTO_LOCK_KEY = 'about_profile_photo_locked';
 const ABOUT_PHOTO_CHANGE_PASSWORD = '580622';
@@ -163,6 +169,24 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.azureLoadingStatus    = document.getElementById('azureLoadingStatus');
   DOM.azureLoadingText      = document.getElementById('azureLoadingText');
 
+  // Azure tasks section
+  DOM.azureConnectedStrip   = document.getElementById('azureConnectedStrip');
+  DOM.azureConnectedProject = document.getElementById('azureConnectedProject');
+  DOM.azureShowTasksBtn     = document.getElementById('azureShowTasksBtn');
+  DOM.azureShowTasksBtnLabel= document.getElementById('azureShowTasksBtnLabel');
+  DOM.azureTasksSection     = document.getElementById('azureTasksSection');
+  DOM.azureTasksSummaryText = document.getElementById('azureTasksSummaryText');
+  DOM.azureReloadBtn        = document.getElementById('azureReloadBtn');
+  DOM.azureFilterUser       = document.getElementById('azureFilterUser');
+  DOM.azureFilterState      = document.getElementById('azureFilterState');
+  DOM.azureApplyFilterBtn   = document.getElementById('azureApplyFilterBtn');
+  DOM.azureResetFilterBtn   = document.getElementById('azureResetFilterBtn');
+  DOM.azureSkeleton         = document.getElementById('azureSkeleton');
+  DOM.azureTasksResults     = document.getElementById('azureTasksResults');
+  DOM.azureTasksEmpty       = document.getElementById('azureTasksEmpty');
+  DOM.azureResultsMeta      = document.getElementById('azureResultsMeta');
+  DOM.azureResultsCount     = document.getElementById('azureResultsCount');
+
   const hasLocalPhoto = restoreAboutPhotoFromStorage();
   if (!hasLocalPhoto) {
     loadSharedAboutPhoto();
@@ -223,6 +247,14 @@ function initEvents() {
 
   // Azure DevOps connection
   DOM.connectAzureBtn.addEventListener('click', openAzureConnectModal);
+
+  // Azure tasks panel
+  DOM.azureShowTasksBtn.addEventListener('click', fetchAzureWorkItems);
+  DOM.azureReloadBtn.addEventListener('click', fetchAzureWorkItems);
+  DOM.azureApplyFilterBtn.addEventListener('click', applyAzureFilters);
+  DOM.azureResetFilterBtn.addEventListener('click', resetAzureFilters);
+  DOM.azureFilterUser.addEventListener('keydown', e => { if (e.key === 'Enter') applyAzureFilters(); });
+  DOM.azureFilterState.addEventListener('change', applyAzureFilters);
 
   // Drag & drop
   DOM.uploadZone.addEventListener('dragover',  e => { e.preventDefault(); DOM.uploadZone.classList.add('drag-over'); });
@@ -1169,6 +1201,7 @@ function openAzureConnectModal() {
     safeSetItem('azure_project', project);
 
     cleanup();
+    updateAzureConnectedStrip();
     fetchAzureWorkItems();
   };
 
@@ -1326,6 +1359,7 @@ async function fetchAzureWorkItems() {
   }
 
   showAzureLoadingModal('Obteniendo tareas de Azure DevOps...');
+  showAzureSkeleton();
 
   try {
     const projectName = normalizeAzureProjectName(AzureConfig.project);
@@ -1411,12 +1445,13 @@ function processAzureData(rows) {
     return;
   }
 
-  const headers = Object.keys(rows[0]);
-  const fileName = `Azure-${AzureConfig.project}-${new Date().toISOString().split('T')[0]}.json`;
+  // Persist to session so the data survives a page refresh
+  saveAzureRowsToSession(rows);
+  AzureState.rows = rows;
 
-  processData(fileName, 'azure', headers, rows);
+  // Show the dedicated Azure panel
+  renderAzurePanel(rows);
   showToast(`✓ ${rows.length} tareas cargadas desde Azure DevOps`, 'success');
-  showResultsAndStats();
 }
 
 // Restore Azure connection if it exists
@@ -1428,5 +1463,161 @@ function restoreAzureConnection() {
     AzureConfig.orgUrl = `https://dev.azure.com/${org}`;
     AzureConfig.project = project;
     AzureConfig.isConnected = true;
+
+    // Show the connected strip
+    updateAzureConnectedStrip();
+
+    // Restore cached rows if any
+    const cached = loadAzureRowsFromSession();
+    if (cached && cached.length > 0) {
+      AzureState.rows = cached;
+      renderAzurePanel(cached);
+    }
+  }
+}
+
+// ─────────────────────────────────────────
+// AZURE SESSION STORAGE HELPERS
+// ─────────────────────────────────────────
+function saveAzureRowsToSession(rows) {
+  try {
+    sessionStorage.setItem(AZURE_ROWS_SESSION_KEY, JSON.stringify(rows));
+  } catch (e) {
+    console.warn('No se pudo guardar en sessionStorage:', e.message);
+  }
+}
+
+function loadAzureRowsFromSession() {
+  try {
+    const raw = sessionStorage.getItem(AZURE_ROWS_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────
+// AZURE CONNECTED STRIP
+// ─────────────────────────────────────────
+function updateAzureConnectedStrip() {
+  if (!DOM.azureConnectedStrip) return;
+  if (AzureConfig.isConnected) {
+    DOM.azureConnectedStrip.style.display = 'flex';
+    if (DOM.azureConnectedProject) {
+      DOM.azureConnectedProject.textContent = AzureConfig.project || '';
+    }
+    // Update label depending on whether tasks are already shown
+    const hasData = AzureState.rows.length > 0;
+    if (DOM.azureShowTasksBtnLabel) {
+      DOM.azureShowTasksBtnLabel.textContent = hasData ? 'Recargar tareas' : 'Mostrar tareas';
+    }
+  } else {
+    DOM.azureConnectedStrip.style.display = 'none';
+  }
+}
+
+// ─────────────────────────────────────────
+// AZURE TASKS PANEL RENDER
+// ─────────────────────────────────────────
+function showAzureSkeleton() {
+  if (!DOM.azureTasksSection) return;
+  DOM.azureTasksSection.style.display = '';
+  DOM.azureSkeleton.style.display = 'flex';
+  DOM.azureTasksResults.innerHTML = '';
+  DOM.azureTasksEmpty.style.display = 'none';
+  DOM.azureResultsMeta.style.display = 'none';
+}
+
+function hideAzureSkeleton() {
+  if (DOM.azureSkeleton) DOM.azureSkeleton.style.display = 'none';
+}
+
+function renderAzurePanel(rows) {
+  if (!DOM.azureTasksSection) return;
+
+  // Show section + skeleton briefly for effect
+  showAzureSkeleton();
+
+  // Populate the state dropdown with unique states from data
+  populateStateFilter(rows);
+
+  // Small delay to show skeleton shimmer before rendering table
+  setTimeout(() => {
+    hideAzureSkeleton();
+    renderAzureTable(rows);
+    DOM.azureTasksSection.style.display = '';
+    updateAzureConnectedStrip();
+  }, 600);
+}
+
+function populateStateFilter(rows) {
+  if (!DOM.azureFilterState) return;
+  const currentVal = DOM.azureFilterState.value;
+  const states = [...new Set(rows.map(r => String(r['Estado'] || r['State'] || '').trim()).filter(Boolean))].sort();
+
+  DOM.azureFilterState.innerHTML = '<option value="">Todos los estados</option>';
+  states.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = s;
+    if (s === currentVal) opt.selected = true;
+    DOM.azureFilterState.appendChild(opt);
+  });
+}
+
+function renderAzureTable(rows) {
+  DOM.azureTasksResults.innerHTML = '';
+
+  if (!rows || rows.length === 0) {
+    DOM.azureTasksEmpty.style.display = '';
+    DOM.azureResultsMeta.style.display = 'none';
+    return;
+  }
+
+  DOM.azureTasksEmpty.style.display = 'none';
+
+  // Results count badge
+  DOM.azureResultsMeta.style.display = 'flex';
+  DOM.azureResultsCount.textContent = `${rows.length} tarea${rows.length !== 1 ? 's' : ''}`;
+
+  // Summary text
+  if (DOM.azureTasksSummaryText) {
+    DOM.azureTasksSummaryText.textContent = `${AzureConfig.project} — ${rows.length} tarea${rows.length !== 1 ? 's' : ''}`;
+  }
+
+  const headers = Object.keys(rows[0]);
+  const colMap  = identifyColumns(headers);
+  const table   = buildTable(rows, headers, colMap);
+  DOM.azureTasksResults.appendChild(table);
+}
+
+// ─────────────────────────────────────────
+// AZURE FILTERS
+// ─────────────────────────────────────────
+function applyAzureFilters() {
+  const userQuery = (DOM.azureFilterUser.value || '').trim().toLowerCase();
+  const stateQuery = (DOM.azureFilterState.value || '').trim().toLowerCase();
+
+  const filtered = AzureState.rows.filter(row => {
+    const assignedTo = String(row['Asignado a'] || row['Assigned To'] || row['assignedTo'] || '').toLowerCase();
+    const state      = String(row['Estado']    || row['State']       || row['state']      || '').toLowerCase();
+
+    const userMatch  = !userQuery  || assignedTo.includes(userQuery);
+    const stateMatch = !stateQuery || state === stateQuery;
+    return userMatch && stateMatch;
+  });
+
+  renderAzureTable(filtered);
+}
+
+function resetAzureFilters() {
+  if (DOM.azureFilterUser)  DOM.azureFilterUser.value  = '';
+  if (DOM.azureFilterState) DOM.azureFilterState.value = '';
+  renderAzureTable(AzureState.rows);
+  // Update count badge
+  if (DOM.azureResultsCount) {
+    DOM.azureResultsCount.textContent = `${AzureState.rows.length} tarea${AzureState.rows.length !== 1 ? 's' : ''}`;
   }
 }
