@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
+$backendVersion = '2026-05-03.2';
+
 // Optional CORS support for custom domains/subdomains if needed.
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if ($origin !== '') {
@@ -38,7 +40,9 @@ $action = trim((string) ($payload['action'] ?? 'fetch'));
 
 if ($action === 'status') {
     respondOk([
-        'hasPat' => getServerPat() !== ''
+        'hasPat' => getServerPat() !== '',
+        'backendVersion' => $backendVersion,
+        'wiqlMode' => 'query+url-$top'
     ]);
 }
 
@@ -193,7 +197,8 @@ $rows = array_map(static function (array $wi): array {
 respondOk([
     'rows' => $rows,
     'count' => count($rows),
-    'limitApplied' => $maxItems
+    'limitApplied' => $maxItems,
+    'backendVersion' => $backendVersion
 ]);
 
 function normalizeProjectName(string $project): string

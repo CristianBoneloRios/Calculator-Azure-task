@@ -1270,10 +1270,14 @@ async function callAzureBackend(payload) {
 async function checkServerPatStatus() {
   try {
     const response = await callAzureBackend({ action: 'status' });
+    const suffix = response.backendVersion
+      ? ` (v${response.backendVersion})`
+      : '';
+
     if (response.hasPat) {
-      DOM.azurePatServerStatus.textContent = 'Estado PAT servidor: configurado.';
+      DOM.azurePatServerStatus.textContent = `Estado PAT servidor: configurado${suffix}.`;
     } else {
-      DOM.azurePatServerStatus.textContent = 'Estado PAT servidor: no configurado.';
+      DOM.azurePatServerStatus.textContent = `Estado PAT servidor: no configurado${suffix}.`;
     }
   } catch (_) {
     DOM.azurePatServerStatus.textContent = 'Estado PAT servidor: no se pudo verificar.';
@@ -1326,10 +1330,14 @@ async function fetchAzureWorkItems() {
   } catch (error) {
     hideAzureLoadingModal();
 
+    const backendHint = DOM.azurePatServerStatus && DOM.azurePatServerStatus.textContent.includes('(v')
+      ? ` Backend: ${DOM.azurePatServerStatus.textContent}`
+      : '';
+
     if (error instanceof TypeError && String(error.message).includes('Failed to fetch')) {
       showToast('No se pudo conectar al backend (api/azure.php). En Hostinger verifica que PHP este activo y el archivo exista en /api.', 'error');
     } else {
-      showToast(`Error: ${error.message}`, 'error');
+      showToast(`Error: ${error.message}.${backendHint}`, 'error');
     }
 
     console.error('Azure fetch error:', error);
