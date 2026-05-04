@@ -16,7 +16,6 @@ const AppState = {
 // Azure DevOps Configuration
 const AzureConfig = {
   orgUrl: null,
-  pat: null,
   project: null,
   isConnected: false
 };
@@ -136,7 +135,6 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.azureConnectModal     = document.getElementById('azureConnectModal');
   DOM.azureOrgInput         = document.getElementById('azureOrgInput');
   DOM.azureProjectInput     = document.getElementById('azureProjectInput');
-  DOM.azurePatInput         = document.getElementById('azurePatInput');
   DOM.azureConnectError     = document.getElementById('azureConnectError');
   DOM.azureConnectCancelBtn = document.getElementById('azureConnectCancelBtn');
   DOM.azureConnectConfirmBtn= document.getElementById('azureConnectConfirmBtn');
@@ -1111,17 +1109,15 @@ function openAzureConnectModal() {
 
   DOM.azureOrgInput.value = savedOrg;
   DOM.azureProjectInput.value = savedProject;
-  DOM.azurePatInput.value = '';
   DOM.azureConnectError.textContent = '';
 
   const onConfirm = () => {
     const org = DOM.azureOrgInput.value.trim();
     const project = normalizeAzureProjectName(DOM.azureProjectInput.value);
-    const pat = DOM.azurePatInput.value.trim();
 
     // Validation
-    if (!org || !project || !pat) {
-      DOM.azureConnectError.textContent = '⚠️ Todos los campos son requeridos.';
+    if (!org || !project) {
+      DOM.azureConnectError.textContent = 'Todos los campos son requeridos.';
       return;
     }
 
@@ -1134,20 +1130,13 @@ function openAzureConnectModal() {
       return;
     }
 
-    if (pat.includes(' ') || pat.includes('\n')) {
-      DOM.azureConnectError.textContent = '⚠️ El PAT tiene espacios. Revisa que lo copiaste correctamente.';
-      return;
-    }
-
     // Save credentials
     AzureConfig.orgUrl = `https://dev.azure.com/${cleanOrg}`;
     AzureConfig.project = project;
-    AzureConfig.pat = pat;
     AzureConfig.isConnected = true;
 
     safeSetItem('azure_org', cleanOrg);
     safeSetItem('azure_project', project);
-    safeSetItem('azure_pat_enc', btoa(pat)); // Basic encryption
 
     cleanup();
     fetchAzureWorkItems();
@@ -1235,8 +1224,7 @@ async function fetchAzureWorkItems() {
       },
       body: JSON.stringify({
         org: AzureConfig.orgUrl.replace('https://dev.azure.com/', '').trim(),
-        project: projectName,
-        pat: AzureConfig.pat
+        project: projectName
       })
     });
 
@@ -1316,12 +1304,10 @@ function processAzureData(rows) {
 function restoreAzureConnection() {
   const org = safeGetItem('azure_org');
   const project = safeGetItem('azure_project');
-  const pat_enc = safeGetItem('azure_pat_enc');
 
-  if (org && project && pat_enc) {
+  if (org && project) {
     AzureConfig.orgUrl = `https://dev.azure.com/${org}`;
     AzureConfig.project = project;
-    AzureConfig.pat = atob(pat_enc);
     AzureConfig.isConnected = true;
   }
 }

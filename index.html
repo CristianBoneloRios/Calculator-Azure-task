@@ -379,7 +379,7 @@
       <div class="system-modal-icon" style="color: #0078d4;"><i class="fab fa-microsoft"></i></div>
       <div>
         <h3 id="azureConnectTitle">Conectar Azure DevOps</h3>
-        <p>Ingresa tus credenciales para traer tareas automáticamente.</p>
+        <p>Ingresa organizacion y proyecto. El PAT se usa solo en servidor.</p>
       </div>
     </div>
     <form class="system-modal-body" onsubmit="return false;">
@@ -389,11 +389,8 @@
       <label for="azureProjectInput">Nombre del Proyecto</label>
       <input id="azureProjectInput" type="text" autocomplete="off" placeholder="ej: Mi Proyecto" />
       
-      <label for="azurePatInput">Personal Access Token (PAT)</label>
-      <input id="azurePatInput" type="password" autocomplete="off" placeholder="Pega tu PAT aquí" />
-      
       <div class="system-modal-help">
-        <strong>🔐 Tu PAT es seguro:</strong> Se guarda solo en este navegador. Nunca se envía a servidores externos.
+        Configura el PAT en el archivo del servidor api/config.php (o variable de entorno AZURE_DEVOPS_PAT).
       </div>
       <div class="system-modal-error" id="azureConnectError"></div>
     </form>

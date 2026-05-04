@@ -22,6 +22,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     respondError(405, 'Metodo no permitido. Usa POST.');
 }
 
+$configPath = __DIR__ . '/config.php';
+if (is_file($configPath)) {
+    require_once $configPath;
+}
+
 $rawBody = file_get_contents('php://input');
 $payload = json_decode((string) $rawBody, true);
 
@@ -31,10 +36,10 @@ if (!is_array($payload)) {
 
 $org = trim((string) ($payload['org'] ?? ''));
 $project = normalizeProjectName((string) ($payload['project'] ?? ''));
-$pat = trim((string) ($payload['pat'] ?? ''));
+$pat = getServerPat();
 
 if ($org === '' || $project === '' || $pat === '') {
-    respondError(400, 'org, project y pat son requeridos.');
+    respondError(400, 'org y project son requeridos, y el PAT debe configurarse en servidor.');
 }
 
 if (!preg_match('/^[a-zA-Z0-9_-]+$/', $org)) {
@@ -163,6 +168,20 @@ function normalizeProjectName(string $project): string
     }
 
     return $value;
+}
+
+function getServerPat(): string
+{
+    if (defined('AZURE_DEVOPS_PAT') && is_string(AZURE_DEVOPS_PAT) && trim(AZURE_DEVOPS_PAT) !== '') {
+        return trim(AZURE_DEVOPS_PAT);
+    }
+
+    $env = getenv('AZURE_DEVOPS_PAT');
+    if (is_string($env) && trim($env) !== '') {
+        return trim($env);
+    }
+
+    return '';
 }
 
 function azureRequest(string $url, string $method, ?array $body, array $headers): array
