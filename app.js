@@ -1225,85 +1225,45 @@ async function fetchAzureWorkItems() {
 
   try {
     const projectName = normalizeAzureProjectName(AzureConfig.project);
-    const projectPath = encodeURIComponent(projectName);
 
-    if (window.location.hostname.endsWith('github.io')) {
-      throw new Error('CORS bloqueado en GitHub Pages. Azure DevOps no permite llamadas directas desde este origen. Usa un backend/proxy (Azure Function/Cloudflare Worker/Netlify Function) para invocar la API con tu PAT.');
-    }
+    DOM.azureLoadingStatus.textContent = 'Consultando backend de Azure...';
 
-    // Use @project to avoid WIQL parsing issues with project names containing spaces/special chars.
-    const wiqlQuery = [
-      'SELECT [System.Id]',
-      'FROM WorkItems',
-      'WHERE [System.TeamProject] = @project',
-      'ORDER BY [System.ChangedDate] DESC'
-    ].join(' ');
-
-    const auth = btoa(`:${AzureConfig.pat}`);
-    const response = await fetch(`${AzureConfig.orgUrl}/${projectPath}/_apis/wit/wiql?api-version=7.0`, {
+    const backendResponse = await fetch('api/azure.php', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${auth}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ query: wiqlQuery })
+      body: JSON.stringify({
+        org: AzureConfig.orgUrl.replace('https://dev.azure.com/', '').trim(),
+        project: projectName,
+        pat: AzureConfig.pat
+      })
     });
 
-    if (!response.ok) {
-      let errorMsg = `Error ${response.status}`;
-      const errBody = await response.json().catch(() => null);
-      const azureMsg = errBody && typeof errBody.message === 'string'
-        ? errBody.message
-        : '';
-
-      if (response.status === 401) {
-        errorMsg = 'PAT inválido o expirado. Revisa tus credenciales.';
-      } else if (response.status === 403) {
-        errorMsg = 'Acceso denegado. Verifica los permisos de tu PAT.';
-      } else if (response.status === 404) {
-        errorMsg = 'Proyecto no encontrado. Revisa el nombre del proyecto.';
-      } else if (response.status === 400) {
-        errorMsg = azureMsg
-          ? `Consulta WIQL inválida: ${azureMsg}`
-          : 'Consulta WIQL inválida. Revisa proyecto, permisos y tipo de proceso en Azure DevOps.';
-      }
-      throw new Error(errorMsg);
+    const payload = await backendResponse.json().catch(() => null);
+    if (!backendResponse.ok || !payload || payload.ok !== true) {
+      const msg = payload && payload.message
+        ? payload.message
+        : `Error ${backendResponse.status}. No se pudo obtener respuesta valida del backend.`;
+      throw new Error(msg);
     }
 
-    const data = await response.json();
-    if (!data.workItems || data.workItems.length === 0) {
+    if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
       hideAzureLoadingModal();
       showToast('No se encontraron tareas en el proyecto.', 'info');
       return;
     }
 
-    // Get work item details
-    DOM.azureLoadingStatus.textContent = `Procesando ${data.workItems.length} tareas...`;
-
-    const workItemIds = data.workItems.map(wi => wi.id).join(',');
-    const detailResponse = await fetch(
-      `${AzureConfig.orgUrl}/_apis/wit/workitems?ids=${workItemIds}&$expand=all&api-version=7.0`,
-      {
-        headers: {
-          'Authorization': `Basic ${auth}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    if (!detailResponse.ok) throw new Error('Error fetching work item details');
-
-    const detailData = await detailResponse.json();
-    const rows = convertAzureWorkItemsToRows(detailData.value);
+    DOM.azureLoadingStatus.textContent = `Procesando ${payload.rows.length} tareas...`;
 
     hideAzureLoadingModal();
-    processAzureData(rows);
+    processAzureData(payload.rows);
 
   } catch (error) {
     hideAzureLoadingModal();
 
     if (error instanceof TypeError && String(error.message).includes('Failed to fetch')) {
-      showToast('Fallo de red/CORS al conectar con Azure DevOps. Si usas GitHub Pages, necesitas backend/proxy para esta llamada.', 'error');
+      showToast('No se pudo conectar al backend (api/azure.php). En Hostinger verifica que PHP este activo y el archivo exista en /api.', 'error');
     } else {
       showToast(`Error: ${error.message}`, 'error');
     }
