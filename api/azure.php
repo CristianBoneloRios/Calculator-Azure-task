@@ -87,8 +87,8 @@ $orgUrl = 'https://dev.azure.com/' . $org;
 $projectPath = rawurlencode($project);
 $authHeader = 'Authorization: Basic ' . base64_encode(':' . $pat);
 
-$wiql = 'SELECT TOP ' . $maxItems . ' [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.ChangedDate] DESC';
-$wiqlUrl = $orgUrl . '/' . $projectPath . '/_apis/wit/wiql?api-version=7.0';
+$wiql = 'SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.ChangedDate] DESC';
+$wiqlUrl = $orgUrl . '/' . $projectPath . '/_apis/wit/wiql?api-version=7.0&%24top=' . $maxItems;
 
 $wiqlResponse = azureRequest($wiqlUrl, 'POST', [
     'query' => $wiql
