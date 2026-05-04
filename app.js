@@ -33,6 +33,21 @@ const SHARED_PROFILE_PHOTO_CANDIDATES = [
 
 const AZURE_DEFAULT_MAX_ITEMS = 10000;
 
+function getAzureBackendCandidates() {
+  const candidates = ['api/azure.php', './api/azure.php', '/api/azure.php'];
+  const normalized = [];
+
+  for (const candidate of candidates) {
+    try {
+      normalized.push(new URL(candidate, window.location.href).toString());
+    } catch (_) {
+      // Ignore malformed URL candidates and continue with valid ones.
+    }
+  }
+
+  return [...new Set(normalized)];
+}
+
 const GITHUB_REPO_OWNER = 'CristianBoneloRios';
 const GITHUB_REPO_NAME = 'Calculator-Azure-task';
 const GITHUB_REPO_BRANCH = 'main';
@@ -1248,36 +1263,42 @@ function normalizeAzureProjectName(projectName) {
 }
 
 async function callAzureBackend(payload, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const endpoints = getAzureBackendCandidates();
+  let lastError = null;
 
-  let backendResponse;
-  try {
-    backendResponse = await fetch('api/azure.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
-  } catch (fetchErr) {
-    clearTimeout(timer);
-    if (fetchErr.name === 'AbortError') {
-      throw new Error('Tiempo de espera agotado (15s). Verifica que api/azure.php existe en el servidor.');
+  for (const endpoint of endpoints) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const backendResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      const data = await backendResponse.json().catch(() => null);
+      if (!backendResponse.ok || !data) {
+        const msg = data && data.message
+          ? data.message
+          : `Error HTTP ${backendResponse.status}. El backend no devolvio JSON valido.`;
+        throw new Error(`${msg} URL: ${endpoint}`);
+      }
+
+      return data;
+    } catch (fetchErr) {
+      if (fetchErr.name === 'AbortError') {
+        lastError = new Error(`Tiempo de espera agotado (${Math.round(timeoutMs / 1000)}s). URL: ${endpoint}`);
+      } else {
+        lastError = new Error(`No se pudo conectar al backend. URL: ${endpoint}. Detalle: ${fetchErr.message}`);
+      }
+    } finally {
+      clearTimeout(timer);
     }
-    throw new Error(`No se pudo conectar al backend: ${fetchErr.message}`);
-  } finally {
-    clearTimeout(timer);
   }
 
-  const data = await backendResponse.json().catch(() => null);
-  if (!backendResponse.ok || !data) {
-    const msg = data && data.message
-      ? data.message
-      : `Error HTTP ${backendResponse.status}. El backend no devolvio JSON valido (¿existe api/azure.php en el servidor?).`;
-    throw new Error(msg);
-  }
-
-  return data;
+  throw lastError || new Error('No se pudo contactar api/azure.php en ninguna ruta conocida.');
 }
 
 async function checkServerPatStatus() {
