@@ -1116,7 +1116,7 @@ function openAzureConnectModal() {
 
   const onConfirm = () => {
     const org = DOM.azureOrgInput.value.trim();
-    const project = DOM.azureProjectInput.value.trim();
+    const project = normalizeAzureProjectName(DOM.azureProjectInput.value);
     const pat = DOM.azurePatInput.value.trim();
 
     // Validation
@@ -1198,6 +1198,23 @@ function hideAzureLoadingModal() {
   document.body.style.overflow = '';
 }
 
+function normalizeAzureProjectName(projectName) {
+  let value = String(projectName || '').trim();
+
+  // Prevent double-encoding issues like "Olimpia%2520Agil".
+  for (let i = 0; i < 2; i++) {
+    try {
+      const decoded = decodeURIComponent(value);
+      if (decoded === value) break;
+      value = decoded;
+    } catch (_) {
+      break;
+    }
+  }
+
+  return value;
+}
+
 async function fetchAzureWorkItems() {
   if (!AzureConfig.isConnected) {
     showToast('Azure no está conectado.', 'error');
@@ -1207,7 +1224,12 @@ async function fetchAzureWorkItems() {
   showAzureLoadingModal('Obteniendo tareas de Azure DevOps...');
 
   try {
-    const projectPath = encodeURIComponent(AzureConfig.project);
+    const projectName = normalizeAzureProjectName(AzureConfig.project);
+    const projectPath = encodeURIComponent(projectName);
+
+    if (window.location.hostname.endsWith('github.io')) {
+      throw new Error('CORS bloqueado en GitHub Pages. Azure DevOps no permite llamadas directas desde este origen. Usa un backend/proxy (Azure Function/Cloudflare Worker/Netlify Function) para invocar la API con tu PAT.');
+    }
 
     // Use @project to avoid WIQL parsing issues with project names containing spaces/special chars.
     const wiqlQuery = [
@@ -1279,7 +1301,13 @@ async function fetchAzureWorkItems() {
 
   } catch (error) {
     hideAzureLoadingModal();
-    showToast(`Error: ${error.message}`, 'error');
+
+    if (error instanceof TypeError && String(error.message).includes('Failed to fetch')) {
+      showToast('Fallo de red/CORS al conectar con Azure DevOps. Si usas GitHub Pages, necesitas backend/proxy para esta llamada.', 'error');
+    } else {
+      showToast(`Error: ${error.message}`, 'error');
+    }
+
     console.error('Azure fetch error:', error);
   }
 }
