@@ -24,12 +24,14 @@ const ABOUT_PHOTO_STORAGE_KEY = 'about_profile_photo_dataurl';
 const ABOUT_PHOTO_LOCK_KEY = 'about_profile_photo_locked';
 const ABOUT_PHOTO_CHANGE_PASSWORD = '580622';
 const SHARED_PROFILE_PHOTO_CANDIDATES = [
+  'assets/profile-photo.svg',
   'assets/profile-photo.jpg',
   'assets/profile-photo.jpeg',
   'assets/profile-photo.png',
-  'assets/profile-photo.webp',
-  'assets/profile-photo.svg'
+  'assets/profile-photo.webp'
 ];
+
+const AZURE_DEFAULT_MAX_ITEMS = 10000;
 
 const GITHUB_REPO_OWNER = 'CristianBoneloRios';
 const GITHUB_REPO_NAME = 'Calculator-Azure-task';
@@ -1295,7 +1297,8 @@ async function fetchAzureWorkItems() {
     const payload = await callAzureBackend({
       org: AzureConfig.orgUrl.replace('https://dev.azure.com/', '').trim(),
       project: projectName,
-      pat
+      pat,
+      maxItems: AZURE_DEFAULT_MAX_ITEMS
     });
 
     if (!payload || payload.ok !== true) {
@@ -1312,6 +1315,10 @@ async function fetchAzureWorkItems() {
     }
 
     DOM.azureLoadingStatus.textContent = `Procesando ${payload.rows.length} tareas...`;
+
+    if (payload.limitApplied) {
+      showToast(`Se cargaron ${payload.rows.length} tareas recientes (límite aplicado: ${payload.limitApplied}).`, 'info');
+    }
 
     hideAzureLoadingModal();
     processAzureData(payload.rows);

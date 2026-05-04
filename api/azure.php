@@ -56,6 +56,14 @@ $org = trim((string) ($payload['org'] ?? ''));
 $project = normalizeProjectName((string) ($payload['project'] ?? ''));
 $incomingPat = trim((string) ($payload['pat'] ?? ''));
 
+$maxItems = (int) ($payload['maxItems'] ?? 10000);
+if ($maxItems < 1) {
+    $maxItems = 10000;
+}
+if ($maxItems > 20000) {
+    $maxItems = 20000;
+}
+
 if ($incomingPat !== '') {
     if (preg_match('/\s/', $incomingPat) === 1) {
         respondError(400, 'El PAT contiene espacios o saltos de linea.');
@@ -79,7 +87,7 @@ $orgUrl = 'https://dev.azure.com/' . $org;
 $projectPath = rawurlencode($project);
 $authHeader = 'Authorization: Basic ' . base64_encode(':' . $pat);
 
-$wiql = 'SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.ChangedDate] DESC';
+$wiql = 'SELECT TOP ' . $maxItems . ' [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.ChangedDate] DESC';
 $wiqlUrl = $orgUrl . '/' . $projectPath . '/_apis/wit/wiql?api-version=7.0';
 
 $wiqlResponse = azureRequest($wiqlUrl, 'POST', [
@@ -102,6 +110,9 @@ if ($wiqlResponse['status'] < 200 || $wiqlResponse['status'] >= 300) {
         respondError(404, 'Proyecto u organizacion no encontrada.');
     }
     if ($wiqlResponse['status'] === 400) {
+        if (strpos($azureMsg, 'VS402337') !== false) {
+            respondError(400, 'El proyecto tiene demasiados items. Reduce el alcance de consulta (por sprint/estado) o baja maxItems.');
+        }
         respondError(400, $azureMsg !== '' ? $azureMsg : 'Consulta WIQL invalida.');
     }
 
@@ -181,7 +192,8 @@ $rows = array_map(static function (array $wi): array {
 
 respondOk([
     'rows' => $rows,
-    'count' => count($rows)
+    'count' => count($rows),
+    'limitApplied' => $maxItems
 ]);
 
 function normalizeProjectName(string $project): string
