@@ -135,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.azureConnectModal     = document.getElementById('azureConnectModal');
   DOM.azureOrgInput         = document.getElementById('azureOrgInput');
   DOM.azureProjectInput     = document.getElementById('azureProjectInput');
+  DOM.azurePatInput         = document.getElementById('azurePatInput');
   DOM.azureConnectError     = document.getElementById('azureConnectError');
   DOM.azureConnectCancelBtn = document.getElementById('azureConnectCancelBtn');
   DOM.azureConnectConfirmBtn= document.getElementById('azureConnectConfirmBtn');
@@ -1109,14 +1110,16 @@ function openAzureConnectModal() {
 
   DOM.azureOrgInput.value = savedOrg;
   DOM.azureProjectInput.value = savedProject;
+  DOM.azurePatInput.value = '';
   DOM.azureConnectError.textContent = '';
 
   const onConfirm = () => {
     const org = DOM.azureOrgInput.value.trim();
     const project = normalizeAzureProjectName(DOM.azureProjectInput.value);
+    const pat = DOM.azurePatInput.value.trim();
 
     // Validation
-    if (!org || !project) {
+    if (!org || !project || !pat) {
       DOM.azureConnectError.textContent = 'Todos los campos son requeridos.';
       return;
     }
@@ -1127,6 +1130,11 @@ function openAzureConnectModal() {
 
     if (!cleanOrg.match(/^[a-zA-Z0-9_-]+$/)) {
       DOM.azureConnectError.textContent = '⚠️ Nombre de organización inválido.';
+      return;
+    }
+
+    if (pat.includes(' ') || pat.includes('\n')) {
+      DOM.azureConnectError.textContent = '⚠️ El PAT tiene espacios. Revisa que lo copiaste correctamente.';
       return;
     }
 
@@ -1224,7 +1232,8 @@ async function fetchAzureWorkItems() {
       },
       body: JSON.stringify({
         org: AzureConfig.orgUrl.replace('https://dev.azure.com/', '').trim(),
-        project: projectName
+        project: projectName,
+        pat: DOM.azurePatInput ? DOM.azurePatInput.value.trim() : ''
       })
     });
 

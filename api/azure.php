@@ -36,6 +36,17 @@ if (!is_array($payload)) {
 
 $org = trim((string) ($payload['org'] ?? ''));
 $project = normalizeProjectName((string) ($payload['project'] ?? ''));
+$incomingPat = trim((string) ($payload['pat'] ?? ''));
+
+if ($incomingPat !== '') {
+    if (preg_match('/\s/', $incomingPat) === 1) {
+        respondError(400, 'El PAT contiene espacios o saltos de linea.');
+    }
+    if (!persistServerPat($incomingPat)) {
+        respondError(500, 'No se pudo guardar el PAT en servidor. Verifica permisos de escritura en api/storage.');
+    }
+}
+
 $pat = getServerPat();
 
 if ($org === '' || $project === '' || $pat === '') {
@@ -172,6 +183,11 @@ function normalizeProjectName(string $project): string
 
 function getServerPat(): string
 {
+    $stored = readServerPat();
+    if ($stored !== '') {
+        return $stored;
+    }
+
     if (defined('AZURE_DEVOPS_PAT') && is_string(AZURE_DEVOPS_PAT) && trim(AZURE_DEVOPS_PAT) !== '') {
         return trim(AZURE_DEVOPS_PAT);
     }
@@ -182,6 +198,44 @@ function getServerPat(): string
     }
 
     return '';
+}
+
+function getPatStoragePath(): string
+{
+    return __DIR__ . '/storage/pat.store.php';
+}
+
+function persistServerPat(string $pat): bool
+{
+    $dir = __DIR__ . '/storage';
+    if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
+        return false;
+    }
+
+    $path = getPatStoragePath();
+    $content = "<?php\nreturn " . var_export($pat, true) . ";\n";
+    $written = @file_put_contents($path, $content, LOCK_EX);
+    if ($written === false) {
+        return false;
+    }
+
+    @chmod($path, 0600);
+    return true;
+}
+
+function readServerPat(): string
+{
+    $path = getPatStoragePath();
+    if (!is_file($path)) {
+        return '';
+    }
+
+    $value = require $path;
+    if (!is_string($value)) {
+        return '';
+    }
+
+    return trim($value);
 }
 
 function azureRequest(string $url, string $method, ?array $body, array $headers): array
