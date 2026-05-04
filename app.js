@@ -1247,20 +1247,33 @@ function normalizeAzureProjectName(projectName) {
   return value;
 }
 
-async function callAzureBackend(payload) {
-  const backendResponse = await fetch('api/azure.php', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
+async function callAzureBackend(payload, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let backendResponse;
+  try {
+    backendResponse = await fetch('api/azure.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+  } catch (fetchErr) {
+    clearTimeout(timer);
+    if (fetchErr.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado (15s). Verifica que api/azure.php existe en el servidor.');
+    }
+    throw new Error(`No se pudo conectar al backend: ${fetchErr.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
 
   const data = await backendResponse.json().catch(() => null);
   if (!backendResponse.ok || !data) {
     const msg = data && data.message
       ? data.message
-      : `Error ${backendResponse.status}. Respuesta invalida del backend.`;
+      : `Error HTTP ${backendResponse.status}. El backend no devolvio JSON valido (¿existe api/azure.php en el servidor?).`;
     throw new Error(msg);
   }
 
@@ -1279,8 +1292,9 @@ async function checkServerPatStatus() {
     } else {
       DOM.azurePatServerStatus.textContent = `Estado PAT servidor: no configurado${suffix}.`;
     }
-  } catch (_) {
-    DOM.azurePatServerStatus.textContent = 'Estado PAT servidor: no se pudo verificar.';
+  } catch (err) {
+    DOM.azurePatServerStatus.textContent = `Estado PAT servidor: error — ${err.message}`;
+    console.error('[checkServerPatStatus]', err);
   }
 }
 
