@@ -20,6 +20,18 @@
     normalized: null   // normalized rows ready for export
   };
 
+  const TARGET_HEADERS = [
+    'ID',
+    'Work Item Type',
+    'Title',
+    'Test Step',
+    'Step Action',
+    'Step Expected',
+    'Area Path',
+    'Assigned To',
+    'State'
+  ];
+
   // ─── DOM references ─────────────────────────────────────────────
   const $  = id => document.getElementById(id);
   const normUploadZone    = $('normUploadZone');
@@ -151,8 +163,25 @@
    */
   function colIndex(name) {
     if (!NormState.headers) return -1;
-    const lower = name.toLowerCase();
-    return NormState.headers.findIndex(h => String(h).toLowerCase().trim() === lower);
+    const lower = String(name || '').toLowerCase().trim();
+    return NormState.headers.findIndex(h => normalizeHeader(h) === lower);
+  }
+
+  function normalizeHeader(value) {
+    return String(value || '')
+      .replace(/^\uFEFF/, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  function getValue(row, index) {
+    if (index < 0 || index >= row.length) return '';
+    const value = row[index];
+    return value === null || value === undefined ? '' : String(value).trim();
+  }
+
+  function isCompletelyEmptyRow(row) {
+    return row.every(cell => String(cell || '').trim() === '');
   }
 
   function reNormalize() {
@@ -160,6 +189,11 @@
 
     const idxID       = colIndex('id');
     const idxType     = colIndex('work item type');
+    const idxTitle    = colIndex('title');
+    const idxTestStep = colIndex('test step');
+    const idxAction   = colIndex('step action');
+    const idxExpected = colIndex('step expected');
+    const idxArea     = colIndex('area path');
     const idxAssignee = colIndex('assigned to');
     const idxState    = colIndex('state');
 
@@ -170,41 +204,73 @@
     const normalized = NormState.rawRows.map(row => {
       const r = row.map(cell => (cell === null || cell === undefined) ? '' : String(cell));
 
-      // Pad row to at least header length
-      while (r.length < NormState.headers.length) r.push('');
+      if (isCompletelyEmptyRow(r)) return null;
 
-      const isTestCaseRow = idxType >= 0 &&
-        r[idxType].trim().toLowerCase() === 'test case';
+      const workItemType = getValue(r, idxType);
+      const isTestCaseRow = workItemType.toLowerCase() === 'test case';
+      const hasStepNumber = getValue(r, idxTestStep) !== '';
+      const isStepRow = !isTestCaseRow && hasStepNumber;
 
-      // 1. Clear ID
-      if (clearId && idxID >= 0 && isTestCaseRow) {
-        r[idxID] = '';
+      const idValue = clearId ? '' : getValue(r, idxID);
+      const titleValue = getValue(r, idxTitle);
+      const testStepValue = getValue(r, idxTestStep);
+      const actionValue = getValue(r, idxAction);
+      const expectedValue = getValue(r, idxExpected);
+      const areaValue = getValue(r, idxArea);
+
+      let assigneeValue = getValue(r, idxAssignee);
+      if (cleanAssignee && assigneeValue) {
+        assigneeValue = assigneeValue.replace(/\s*<[^>]+>/, '').trim();
       }
 
-      // 2. Clean Assigned To — strip "<email>" portion
-      if (cleanAssignee && idxAssignee >= 0 && r[idxAssignee]) {
-        r[idxAssignee] = r[idxAssignee].replace(/\s*<[^>]+>/, '').trim();
+      let stateValue = getValue(r, idxState);
+      if (targetState && isTestCaseRow) {
+        stateValue = targetState;
       }
 
-      // 3. Set State for Test Case rows
-      if (targetState && idxState >= 0 && isTestCaseRow) {
-        r[idxState] = targetState;
+      const out = Array(TARGET_HEADERS.length).fill('');
+
+      if (isTestCaseRow) {
+        out[0] = idValue;
+        out[1] = 'Test Case';
+        out[2] = titleValue;
+        out[6] = areaValue;
+        out[7] = assigneeValue;
+        out[8] = stateValue;
+        return out;
       }
 
-      return r;
-    });
+      if (isStepRow) {
+        out[3] = testStepValue;
+        out[4] = actionValue;
+        out[5] = expectedValue;
+        return out;
+      }
+
+      // Fallback: preserve known fields in strict Azure schema.
+      out[0] = idValue;
+      out[1] = workItemType;
+      out[2] = titleValue;
+      out[3] = testStepValue;
+      out[4] = actionValue;
+      out[5] = expectedValue;
+      out[6] = areaValue;
+      out[7] = assigneeValue;
+      out[8] = stateValue;
+      return isCompletelyEmptyRow(out) ? null : out;
+    }).filter(Boolean);
 
     NormState.normalized = normalized;
 
     // Update stats
-    const testCases = normalized.filter((r, i) => {
-      const type = idxType >= 0 ? r[idxType] : '';
+    const testCases = normalized.filter(r => {
+      const type = r[1] || '';
       return type.trim().toLowerCase() === 'test case';
     }).length;
 
     const stepRows = normalized.filter(r => {
-      const step = idxType >= 0 ? r[idxType] : '';
-      const testStep = colIndex('test step') >= 0 ? r[colIndex('test step')] : '';
+      const step = r[1] || '';
+      const testStep = r[3] || '';
       return step.trim() === '' && testStep !== '';
     }).length;
 
@@ -217,7 +283,7 @@
 
   // ─── Preview ─────────────────────────────────────────────────────
   function renderPreview() {
-    const headers = NormState.headers;
+    const headers = TARGET_HEADERS;
     const rows    = NormState.normalized;
     const preview = rows.slice(0, 30);
 
@@ -227,10 +293,9 @@
       '</tr>';
 
     // Body
-    const idxType = colIndex('work item type');
+    const idxType = 1;
     normPreviewBody.innerHTML = preview.map(row => {
-      const isTestCase = idxType >= 0 &&
-        row[idxType].trim().toLowerCase() === 'test case';
+      const isTestCase = (row[idxType] || '').trim().toLowerCase() === 'test case';
       const cls = isTestCase ? ' class="norm-row-testcase"' : ' class="norm-row-step"';
       return `<tr${cls}>` +
         row.map(cell => `<td>${escHtml(cell)}</td>`).join('') +
@@ -242,10 +307,10 @@
   function downloadNormalized() {
     if (!NormState.normalized) return;
 
-    const allRows = [NormState.headers, ...NormState.normalized];
+    const allRows = [TARGET_HEADERS, ...NormState.normalized];
 
     const csv = Papa.unparse(allRows, {
-      quotes: false,        // only quote when necessary
+      quotes: true,
       quoteChar: '"',
       escapeChar: '"',
       delimiter: ',',
@@ -253,7 +318,7 @@
       skipEmptyLines: false
     });
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     const base = NormState.fileName.replace(/\.[^.]+$/, '');
