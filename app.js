@@ -286,7 +286,7 @@ function setActiveNavItem(sectionId) {
 }
 
 function initSectionObserver() {
-  const sectionIds = ['upload-section', 'summary-section', 'results-section'];
+  const sectionIds = ['upload-section', 'summary-section', 'results-section', 'normalizer-section'];
   const sections = sectionIds
     .map(id => document.getElementById(id))
     .filter(Boolean);

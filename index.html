@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Azure Task Hours Calculator</title>
+  <title>Calculador de Horas Azure DevOps</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
@@ -34,7 +34,7 @@
         </div>
         <div class="brand-text">
           <span class="brand-name">Azure Task Hours</span>
-          <span class="brand-sub">CSV & Excel Analyzer</span>
+          <span class="brand-sub">Analizador CSV y Excel</span>
         </div>
       </div>
     </div>
@@ -43,14 +43,14 @@
       <div class="header-chips">
         <span class="chip chip-blue"><i class="fas fa-file-csv"></i> CSV</span>
         <span class="chip chip-green"><i class="fas fa-file-excel"></i> Excel</span>
-        <span class="chip chip-purple"><i class="fas fa-clock"></i> Hours</span>
+        <span class="chip chip-purple"><i class="fas fa-clock"></i> Horas</span>
       </div>
     </div>
 
     <div class="header-right">
       <div class="header-badge">
         <i class="fas fa-chart-line"></i>
-        <span>Azure DevOps Analytics</span>
+        <span>Análisis Azure DevOps</span>
       </div>
     </div>
   </header>
@@ -79,6 +79,10 @@
             <a href="#summary-section" class="nav-item" data-section="summary-section">
               <span class="nav-icon"><i class="fas fa-chart-pie"></i></span>
               <span class="nav-label">Estadísticas</span>
+            </a>
+            <a href="#normalizer-section" class="nav-item" data-section="normalizer-section">
+              <span class="nav-icon"><i class="fas fa-magic"></i></span>
+              <span class="nav-label">Normalizar CSV</span>
             </a>
           </div>
 
@@ -397,6 +401,124 @@
         <div id="fileResultsContainer"></div>
       </section>
 
+      <!-- ═══════════════ NORMALIZER SECTION ═══════════════ -->
+      <section class="content-section" id="normalizer-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fas fa-magic"></i> Normalizar CSV para Azure DevOps</h2>
+            <p>Carga un archivo descargado de Azure DevOps (CSV o Excel) y conviértelo al formato listo para re-importar.</p>
+          </div>
+        </div>
+
+        <!-- Upload zone -->
+        <div class="norm-upload-zone" id="normUploadZone">
+          <div class="norm-upload-content">
+            <div class="upload-animation">
+              <div class="upload-circle" style="background: linear-gradient(135deg,#8b5cf6,#06b6d4);">
+                <i class="fas fa-file-import"></i>
+              </div>
+              <div class="upload-ripple"></div>
+              <div class="upload-ripple delay-1"></div>
+            </div>
+            <h3>Arrastra el archivo exportado de Azure aquí</h3>
+            <p>o haz clic para seleccionar</p>
+            <div class="upload-formats">
+              <span><i class="fas fa-file-csv"></i> .CSV</span>
+              <span><i class="fas fa-file-excel"></i> .XLSX</span>
+              <span><i class="fas fa-file-excel"></i> .XLS</span>
+            </div>
+            <input type="file" id="normFileInput" accept=".csv,.xlsx,.xls" hidden />
+            <button class="btn btn-primary btn-lg" id="normSelectFileBtn">
+              <i class="fas fa-folder-open"></i> Seleccionar Archivo
+            </button>
+          </div>
+          <div class="upload-drag-overlay">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Suelta el archivo aquí</span>
+          </div>
+        </div>
+
+        <!-- Options -->
+        <div class="norm-options" id="normOptions" style="display:none">
+          <div class="norm-options-grid">
+            <div class="norm-option-group">
+              <label for="normStateInput"><i class="fas fa-tag"></i> Estado para Test Cases</label>
+              <input type="text" id="normStateInput" value="Design" placeholder="ej: Design, Testing, Active…" autocomplete="off" />
+              <span class="norm-option-hint">Se aplica a todas las filas de tipo <strong>Test Case</strong>. Déjalo vacío para mantener el original.</span>
+            </div>
+            <div class="norm-option-group">
+              <label><i class="fas fa-user-edit"></i> Formato "Assigned To"</label>
+              <div class="norm-toggle-group">
+                <label class="norm-toggle">
+                  <input type="checkbox" id="normCleanAssignee" checked />
+                  <span class="norm-toggle-slider"></span>
+                </label>
+                <span>Eliminar correo (<code>&lt;email@dominio.com&gt;</code>)</span>
+              </div>
+            </div>
+            <div class="norm-option-group">
+              <label><i class="fas fa-hashtag"></i> Columna ID</label>
+              <div class="norm-toggle-group">
+                <label class="norm-toggle">
+                  <input type="checkbox" id="normClearId" checked />
+                  <span class="norm-toggle-slider"></span>
+                </label>
+                <span>Limpiar IDs (Azure los asigna automáticamente)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="norm-actions">
+            <button class="btn btn-outline btn-sm" id="normClearBtn">
+              <i class="fas fa-times"></i> Limpiar
+            </button>
+            <button class="btn btn-primary" id="normDownloadBtn">
+              <i class="fas fa-download"></i> Descargar CSV Normalizado
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats bar -->
+        <div class="norm-stats-bar" id="normStatsBar" style="display:none">
+          <div class="norm-stat">
+            <i class="fas fa-file-alt"></i>
+            <span id="normStatFile">—</span>
+          </div>
+          <div class="norm-stat">
+            <i class="fas fa-vial"></i>
+            <span id="normStatCases">0 Test Cases</span>
+          </div>
+          <div class="norm-stat">
+            <i class="fas fa-list-ol"></i>
+            <span id="normStatSteps">0 pasos</span>
+          </div>
+          <div class="norm-stat">
+            <i class="fas fa-check-circle" style="color:var(--accent-green)"></i>
+            <span id="normStatReady">Listo para importar</span>
+          </div>
+        </div>
+
+        <!-- Preview table -->
+        <div class="norm-preview-wrap" id="normPreviewWrap" style="display:none">
+          <div class="norm-preview-header">
+            <span><i class="fas fa-eye"></i> Vista previa (primeras 30 filas)</span>
+          </div>
+          <div class="norm-preview-scroll">
+            <table class="norm-preview-table" id="normPreviewTable">
+              <thead id="normPreviewHead"></thead>
+              <tbody id="normPreviewBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div class="results-empty-state" id="normEmptyState">
+          <i class="fas fa-file-import"></i>
+          <h3>Sube un archivo para normalizar</h3>
+          <p>Carga el CSV o Excel tal como lo descargaste de Azure DevOps y obtendrás un archivo listo para re-importar.</p>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -525,5 +647,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="app.js"></script>
+  <script src="normalizer.js"></script>
 </body>
 </html>
