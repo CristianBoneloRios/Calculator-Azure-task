@@ -43,6 +43,7 @@
   const normPreviewWrap   = $('normPreviewWrap');
   const normPreviewHead   = $('normPreviewHead');
   const normPreviewBody   = $('normPreviewBody');
+  const normAreaPathInput = $('normAreaPathInput');
   const normStateInput    = $('normStateInput');
   const normCleanAssignee = $('normCleanAssignee');
   const normClearId       = $('normClearId');
@@ -75,6 +76,7 @@
     });
 
     // Option changes trigger re-normalization
+    normAreaPathInput.addEventListener('input', reNormalize);
     normStateInput.addEventListener('input', reNormalize);
     normCleanAssignee.addEventListener('change', reNormalize);
     normClearId.addEventListener('change', reNormalize);
@@ -141,11 +143,27 @@
   }
 
   function onDataLoaded() {
+    autoFillAreaPathFromData();
     reNormalize();
     normOptions.style.display = '';
     normEmptyState.style.display = 'none';
     normStatsBar.style.display = '';
     normPreviewWrap.style.display = '';
+  }
+
+  function autoFillAreaPathFromData() {
+    if (!normAreaPathInput || normAreaPathInput.value.trim() !== '') return;
+
+    const idxArea = colIndex('area path');
+    if (idxArea < 0 || !NormState.rawRows || !NormState.rawRows.length) return;
+
+    for (const row of NormState.rawRows) {
+      const candidate = getValue(row, idxArea);
+      if (candidate) {
+        normAreaPathInput.value = candidate;
+        break;
+      }
+    }
   }
 
   // ─── Normalization ───────────────────────────────────────────────
@@ -197,6 +215,7 @@
     const idxAssignee = colIndex('assigned to');
     const idxState    = colIndex('state');
 
+    const overrideAreaPath = normAreaPathInput.value.trim();
     const targetState   = normStateInput.value.trim();
     const cleanAssignee = normCleanAssignee.checked;
     const clearId       = normClearId.checked;
@@ -217,6 +236,7 @@
       const actionValue = getValue(r, idxAction);
       const expectedValue = getValue(r, idxExpected);
       const areaValue = getValue(r, idxArea);
+      const finalAreaPath = overrideAreaPath || areaValue;
 
       let assigneeValue = getValue(r, idxAssignee);
       if (cleanAssignee && assigneeValue) {
@@ -234,7 +254,7 @@
         out[0] = idValue;
         out[1] = 'Test Case';
         out[2] = titleValue;
-        out[6] = areaValue;
+        out[6] = finalAreaPath;
         out[7] = assigneeValue;
         out[8] = stateValue;
         return out;
@@ -254,7 +274,7 @@
       out[3] = testStepValue;
       out[4] = actionValue;
       out[5] = expectedValue;
-      out[6] = areaValue;
+      out[6] = finalAreaPath;
       out[7] = assigneeValue;
       out[8] = stateValue;
       return isCompletelyEmptyRow(out) ? null : out;
@@ -346,6 +366,7 @@
     normEmptyState.style.display    = '';
     normPreviewHead.innerHTML       = '';
     normPreviewBody.innerHTML       = '';
+    normAreaPathInput.value         = '';
     normStateInput.value            = 'Design';
     normCleanAssignee.checked       = true;
     normClearId.checked             = true;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Calculador de Horas Azure DevOps</title>
+  <title>Azure Task Suite</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
@@ -33,8 +33,8 @@
           </svg>
         </div>
         <div class="brand-text">
-          <span class="brand-name">Azure Task Hours</span>
-          <span class="brand-sub">Analizador CSV y Excel</span>
+          <span class="brand-name">Azure Task Suite</span>
+          <span class="brand-sub">Gestión, análisis y normalización</span>
         </div>
       </div>
     </div>
@@ -43,14 +43,14 @@
       <div class="header-chips">
         <span class="chip chip-blue"><i class="fas fa-file-csv"></i> CSV</span>
         <span class="chip chip-green"><i class="fas fa-file-excel"></i> Excel</span>
-        <span class="chip chip-purple"><i class="fas fa-clock"></i> Horas</span>
+        <span class="chip chip-purple"><i class="fas fa-screwdriver-wrench"></i> Suite</span>
       </div>
     </div>
 
     <div class="header-right">
       <div class="header-badge">
         <i class="fas fa-chart-line"></i>
-        <span>Análisis Azure DevOps</span>
+        <span>Plataforma Azure DevOps</span>
       </div>
     </div>
   </header>
@@ -72,13 +72,13 @@
               <span class="nav-icon"><i class="fas fa-cloud-upload-alt"></i></span>
               <span class="nav-label">Cargar Archivos</span>
             </a>
-            <a href="#results-section" class="nav-item" data-section="results-section">
-              <span class="nav-icon"><i class="fas fa-table"></i></span>
-              <span class="nav-label">Resultados</span>
-            </a>
             <a href="#summary-section" class="nav-item" data-section="summary-section">
               <span class="nav-icon"><i class="fas fa-chart-pie"></i></span>
               <span class="nav-label">Estadísticas</span>
+            </a>
+            <a href="#results-section" class="nav-item" data-section="results-section">
+              <span class="nav-icon"><i class="fas fa-table"></i></span>
+              <span class="nav-label">Resultados</span>
             </a>
             <a href="#normalizer-section" class="nav-item" data-section="normalizer-section">
               <span class="nav-icon"><i class="fas fa-magic"></i></span>
@@ -106,6 +106,14 @@
               <div class="about-me-btn-info">
                 <span class="about-me-btn-name">Cristian Bonelo Rios</span>
                 <span class="about-me-btn-role">Software Quality Analyst</span>
+              </div>
+              <i class="fas fa-arrow-right about-me-btn-arrow"></i>
+            </button>
+            <button class="about-me-btn" id="diagnosticoBtn" title="Ver estado del backend y rutas del sistema">
+              <i class="fas fa-stethoscope" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent-blue);"></i>
+              <div class="about-me-btn-info">
+                <span class="about-me-btn-name">Diagnóstico</span>
+                <span class="about-me-btn-role">Estado del sistema</span>
               </div>
               <i class="fas fa-arrow-right about-me-btn-arrow"></i>
             </button>
@@ -414,14 +422,14 @@
         <div class="norm-upload-zone" id="normUploadZone">
           <div class="norm-upload-content">
             <div class="upload-animation">
-              <div class="upload-circle" style="background: linear-gradient(135deg,#8b5cf6,#06b6d4);">
-                <i class="fas fa-file-import"></i>
+              <div class="upload-circle">
+                <i class="fas fa-file-upload"></i>
               </div>
               <div class="upload-ripple"></div>
               <div class="upload-ripple delay-1"></div>
             </div>
-            <h3>Arrastra el archivo exportado de Azure aquí</h3>
-            <p>o haz clic para seleccionar</p>
+            <h3>Arrastra y suelta tus archivos aquí</h3>
+            <p>o elige una opción para cargar</p>
             <div class="upload-formats">
               <span><i class="fas fa-file-csv"></i> .CSV</span>
               <span><i class="fas fa-file-excel"></i> .XLSX</span>
@@ -441,6 +449,11 @@
         <!-- Options -->
         <div class="norm-options" id="normOptions" style="display:none">
           <div class="norm-options-grid">
+            <div class="norm-option-group">
+              <label for="normAreaPathInput"><i class="fas fa-map-signs"></i> Area Path para importar</label>
+              <input type="text" id="normAreaPathInput" value="" placeholder="ej: MiProyecto\\QA\\Automation" autocomplete="off" />
+              <span class="norm-option-hint">Si lo completas, se reemplaza la columna <strong>Area Path</strong> en el archivo normalizado.</span>
+            </div>
             <div class="norm-option-group">
               <label for="normStateInput"><i class="fas fa-tag"></i> Estado para Test Cases</label>
               <input type="text" id="normStateInput" value="Design" placeholder="ej: Design, Testing, Active…" autocomplete="off" />
@@ -626,22 +639,52 @@
   <!-- ═══════════════ FOOTER ═══════════════ -->
   <footer class="app-footer">
     <div class="footer-content">
-      <div class="footer-left">
-        <i class="fas fa-code"></i>
+      <div class="footer-section footer-primary">
+        <div class="footer-left">
+          <i class="fas fa-code"></i>
+        </div>
+        <div class="footer-center">
+          <span class="footer-powered">Powered by</span>
+          <span class="footer-name">Cristian Jesus Bonelo Rios</span>
+          <span class="footer-sep">|</span>
+          <span class="footer-role">SOFTWARE QUALITY ANALYST</span>
+          <span class="footer-sep">|</span>
+          <span class="footer-dept">DEVELOPMENT &amp; INNOVATION</span>
+        </div>
+        <div class="footer-right">
+          <span class="footer-version">v1.0.0</span>
+        </div>
       </div>
-      <div class="footer-center">
-        <span class="footer-powered">Powered by</span>
-        <span class="footer-name">Cristian Jesus Bonelo Rios</span>
-        <span class="footer-sep">|</span>
-        <span class="footer-role">SOFTWARE QUALITY ANALYST</span>
-        <span class="footer-sep">|</span>
-        <span class="footer-dept">DEVELOPMENT &amp; INNOVATION</span>
+
+      <div class="footer-section footer-socials">
+        <span class="footer-section-title"><i class="fas fa-share-alt"></i> Redes Sociales</span>
+        <div class="footer-social-links">
+          <a href="https://cristiandevbonelo.github.io/porfoliocristian/" target="_blank" rel="noopener noreferrer" aria-label="Portafolio">
+            <i class="fas fa-globe"></i>
+            <span>Portafolio</span>
+          </a>
+          <a href="#" aria-label="LinkedIn pendiente">
+            <i class="fab fa-linkedin"></i>
+            <span>LinkedIn (pendiente)</span>
+          </a>
+          <a href="https://github.com/CristianBoneloRios" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+            <i class="fab fa-github"></i>
+            <span>GitHub</span>
+          </a>
+        </div>
       </div>
-      <div class="footer-right">
-        <span class="footer-version">v1.0.0</span>
+
+      <div class="footer-section footer-photo-block">
+        <div class="footer-photo-wrap" id="footerPhotoWrap">
+          <img class="footer-photo-thumb" src="https://cristiandevbonelo.github.io/porfoliocristian/assets/1755273365367.jpg" alt="Foto de Cristian Bonelo" loading="lazy" />
+        </div>
       </div>
     </div>
   </footer>
+
+  <div class="photo-hover-backdrop" id="footerPhotoPreviewBackdrop" aria-hidden="true">
+    <img class="photo-hover-preview" id="footerPhotoPreviewImg" src="https://cristiandevbonelo.github.io/porfoliocristian/assets/1755273365367.jpg" alt="Vista ampliada de foto" loading="lazy" />
+  </div>
 
   <!-- External Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>

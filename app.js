@@ -1,8 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════
-   AZURE TASK HOURS CALCULATOR — app.js
-   Supports: CSV (PapaParse) · Excel (SheetJS)
-   Detects Azure DevOps hour columns automatically
-   ═══════════════════════════════════════════════════════════════ */
+  AZURE TASK SUITE — app.js
+  Supports: CSV (PapaParse) · Excel (SheetJS)
+  Detects Azure DevOps hour columns automatically
+  ═══════════════════════════════════════════════════════════════ */
 
 'use strict';
 
@@ -30,6 +30,7 @@ const ABOUT_PHOTO_STORAGE_KEY = 'about_profile_photo_dataurl';
 const ABOUT_PHOTO_LOCK_KEY = 'about_profile_photo_locked';
 const ABOUT_PHOTO_CHANGE_PASSWORD = '580622';
 const SHARED_PROFILE_PHOTO_CANDIDATES = [
+  'https://cristiandevbonelo.github.io/porfoliocristian/assets/risa.png',
   'assets/profile-photo.svg',
   'assets/profile-photo.jpg',
   'assets/profile-photo.jpeg',
@@ -130,6 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.resultsEmptyState  = document.getElementById('resultsEmptyState');
   DOM.toastContainer     = document.getElementById('toastContainer');
   DOM.aboutMeBtn           = document.getElementById('aboutMeBtn');
+  DOM.diagnosticoBtn       = document.getElementById('diagnosticoBtn');
   DOM.aboutModal           = document.getElementById('aboutModal');
   DOM.aboutModalBackdrop   = document.getElementById('aboutModalBackdrop');
   DOM.aboutModalClose      = document.getElementById('aboutModalClose');
@@ -186,6 +188,9 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.azureTasksEmpty       = document.getElementById('azureTasksEmpty');
   DOM.azureResultsMeta      = document.getElementById('azureResultsMeta');
   DOM.azureResultsCount     = document.getElementById('azureResultsCount');
+  DOM.footerPhotoWrap       = document.getElementById('footerPhotoWrap');
+  DOM.footerPhotoPreviewBackdrop = document.getElementById('footerPhotoPreviewBackdrop');
+  DOM.footerPhotoPreviewImg = document.getElementById('footerPhotoPreviewImg');
 
   const hasLocalPhoto = restoreAboutPhotoFromStorage();
   if (!hasLocalPhoto) {
@@ -208,6 +213,7 @@ function initEvents() {
 
   // About Me modal
   DOM.aboutMeBtn.addEventListener('click', openAboutModal);
+  DOM.diagnosticoBtn.addEventListener('click', openDiagnostico);
   DOM.aboutModalClose.addEventListener('click', closeAboutModal);
   DOM.aboutModalBackdrop.addEventListener('click', closeAboutModal);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAboutModal(); });
@@ -277,6 +283,38 @@ function initEvents() {
 
   // Clear all
   DOM.clearAllBtn.addEventListener('click', clearAll);
+
+  // Footer photo hover preview
+  initFooterPhotoHoverPreview();
+}
+
+function initFooterPhotoHoverPreview() {
+  if (!DOM.footerPhotoWrap || !DOM.footerPhotoPreviewBackdrop || !DOM.footerPhotoPreviewImg) return;
+  if (!window.matchMedia || !window.matchMedia('(hover: hover)').matches) return;
+
+  const thumb = DOM.footerPhotoWrap.querySelector('img');
+  if (thumb && thumb.src) {
+    DOM.footerPhotoPreviewImg.src = thumb.src;
+  }
+
+  let hideTimer = null;
+
+  const showPreview = () => {
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+    DOM.footerPhotoPreviewBackdrop.classList.add('active');
+  };
+
+  const hidePreview = () => {
+    hideTimer = window.setTimeout(() => {
+      DOM.footerPhotoPreviewBackdrop.classList.remove('active');
+    }, 40);
+  };
+
+  DOM.footerPhotoWrap.addEventListener('mouseenter', showPreview);
+  DOM.footerPhotoWrap.addEventListener('mouseleave', hidePreview);
 }
 
 function setActiveNavItem(sectionId) {
@@ -326,6 +364,15 @@ function closeAboutModal() {
   DOM.aboutModalBackdrop.classList.remove('active');
   DOM.aboutModal.classList.remove('active');
   document.body.style.overflow = '';
+}
+
+// ─────────────────────────────────────────
+// DIAGNOSTICO
+// ─────────────────────────────────────────
+function openDiagnostico() {
+  const baseUrl = window.location.origin;
+  const diagUrl = baseUrl + '/api/diagnose.php';
+  window.open(diagUrl, '_blank');
 }
 
 function requestPhotoChangeAuthorization() {
