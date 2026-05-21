@@ -18,6 +18,7 @@ function workspaceLayoutStart(string $title, string $activePage, array $user): v
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-bold-rounded/css/uicons-bold-rounded.css" />
   <link rel="stylesheet" href="../styles.css">
   <link rel="stylesheet" href="assets/workspace.css">
 </head>
@@ -29,17 +30,7 @@ function workspaceLayoutStart(string $title, string $activePage, array $user): v
       </button>
       <div class="brand">
         <div class="brand-icon">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="26" height="26">
-            <path d="M11.5 2L2 7.5V16.5L11.5 22L21 16.5V7.5L11.5 2Z" fill="url(#hexGradWs)" stroke="rgba(255,255,255,0.2)" stroke-width="0.5"/>
-            <path d="M7 9L11.5 6.5L16 9V15L11.5 17.5L7 15V9Z" fill="rgba(255,255,255,0.15)"/>
-            <path d="M11.5 6.5V17.5M7 9L16 15M16 9L7 15" stroke="rgba(255,255,255,0.6)" stroke-width="1" stroke-linecap="round"/>
-            <defs>
-              <linearGradient id="hexGradWs" x1="2" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stop-color="#3b82f6"/>
-                <stop offset="100%" stop-color="#06b6d4"/>
-              </linearGradient>
-            </defs>
-          </svg>
+          <i class="fi fi-br-rocket-lunch"></i>
         </div>
         <div class="brand-text">
           <span class="brand-name">Azure Task Suite</span>

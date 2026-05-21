@@ -12,12 +12,15 @@
 
 (function () {
 
+  const DEFAULT_COLUMN_WIDTHS = [90, 160, 340, 90, 360, 360, 240, 240, 150];
+
   // ─── State ──────────────────────────────────────────────────────
   const NormState = {
     rawRows: null,     // parsed rows (array of arrays)
     headers: null,     // header row (array of strings)
     fileName: null,
-    normalized: null   // normalized rows ready for export
+    normalized: null,  // normalized rows ready for export
+    columnWidths: [...DEFAULT_COLUMN_WIDTHS]
   };
 
   const TARGET_HEADERS = [
@@ -41,9 +44,11 @@
   const normEmptyState    = $('normEmptyState');
   const normStatsBar      = $('normStatsBar');
   const normPreviewWrap   = $('normPreviewWrap');
+  const normPreviewTable  = $('normPreviewTable');
   const normPreviewHead   = $('normPreviewHead');
   const normPreviewBody   = $('normPreviewBody');
   const normAreaPathInput = $('normAreaPathInput');
+  const normAssigneeEmailInput = $('normAssigneeEmailInput');
   const normStateInput    = $('normStateInput');
   const normCleanAssignee = $('normCleanAssignee');
   const normClearId       = $('normClearId');
@@ -77,6 +82,7 @@
 
     // Option changes trigger re-normalization
     normAreaPathInput.addEventListener('input', reNormalize);
+    normAssigneeEmailInput.addEventListener('input', reNormalize);
     normStateInput.addEventListener('input', reNormalize);
     normCleanAssignee.addEventListener('change', reNormalize);
     normClearId.addEventListener('change', reNormalize);
@@ -144,6 +150,7 @@
 
   function onDataLoaded() {
     autoFillAreaPathFromData();
+    autoFillAssigneeEmailFromData();
     reNormalize();
     normOptions.style.display = '';
     normEmptyState.style.display = 'none';
@@ -152,15 +159,40 @@
   }
 
   function autoFillAreaPathFromData() {
-    if (!normAreaPathInput || normAreaPathInput.value.trim() !== '') return;
+    if (!normAreaPathInput) return;
 
     const idxArea = colIndex('area path');
-    if (idxArea < 0 || !NormState.rawRows || !NormState.rawRows.length) return;
+    if (idxArea < 0 || !NormState.rawRows || !NormState.rawRows.length) {
+      normAreaPathInput.value = '';
+      return;
+    }
+
+    normAreaPathInput.value = '';
 
     for (const row of NormState.rawRows) {
       const candidate = getValue(row, idxArea);
       if (candidate) {
         normAreaPathInput.value = candidate;
+        break;
+      }
+    }
+  }
+
+  function autoFillAssigneeEmailFromData() {
+    if (!normAssigneeEmailInput || !NormState.rawRows || !NormState.rawRows.length) return;
+
+    const idxAssignee = colIndex('assigned to');
+    if (idxAssignee < 0) {
+      normAssigneeEmailInput.value = '';
+      return;
+    }
+
+    normAssigneeEmailInput.value = '';
+    for (const row of NormState.rawRows) {
+      const assignee = getValue(row, idxAssignee);
+      const match = assignee.match(/<\s*([^>\s]+@[^>\s]+)\s*>/);
+      if (match && match[1]) {
+        normAssigneeEmailInput.value = match[1].trim();
         break;
       }
     }
@@ -216,6 +248,7 @@
     const idxState    = colIndex('state');
 
     const overrideAreaPath = normAreaPathInput.value.trim();
+    const overrideAssigneeEmail = (normAssigneeEmailInput.value || '').trim().replace(/^<|>$/g, '');
     const targetState   = normStateInput.value.trim();
     const cleanAssignee = normCleanAssignee.checked;
     const clearId       = normClearId.checked;
@@ -241,6 +274,12 @@
       let assigneeValue = getValue(r, idxAssignee);
       if (cleanAssignee && assigneeValue) {
         assigneeValue = assigneeValue.replace(/\s*<[^>]+>/, '').trim();
+      } else if (!cleanAssignee && overrideAssigneeEmail && assigneeValue) {
+        const assigneeName = assigneeValue.replace(/\s*<[^>]+>/, '').trim();
+        assigneeValue = assigneeName ? `${assigneeName} <${overrideAssigneeEmail}>` : '';
+      }
+      if (assigneeValue.toLowerCase() === 'design') {
+        assigneeValue = '';
       }
 
       let stateValue = getValue(r, idxState);
@@ -305,27 +344,163 @@
   function renderPreview() {
     const headers = TARGET_HEADERS;
     const rows    = NormState.normalized;
-    const preview = rows.slice(0, 30);
+
+    ensureColumnWidths();
+    applyColumnWidths();
 
     // Head
     normPreviewHead.innerHTML = '<tr>' +
-      headers.map(h => `<th>${escHtml(h)}</th>`).join('') +
+      headers.map((h, index) => `<th data-col-index="${index}"><span class="norm-th-label">${escHtml(h)}</span><span class="norm-col-resizer" data-col-index="${index}" title="Arrastra para ajustar ancho"></span></th>`).join('') +
       '</tr>';
 
     // Body
     const idxType = 1;
-    normPreviewBody.innerHTML = preview.map(row => {
+    normPreviewBody.innerHTML = rows.map((row, rowIndex) => {
       const isTestCase = (row[idxType] || '').trim().toLowerCase() === 'test case';
       const cls = isTestCase ? ' class="norm-row-testcase"' : ' class="norm-row-step"';
       return `<tr${cls}>` +
-        row.map(cell => `<td>${escHtml(cell)}</td>`).join('') +
+        row.map((cell, colIndex) => `<td contenteditable="true" spellcheck="false" data-row-index="${rowIndex}" data-col-index="${colIndex}">${escHtml(cell)}</td>`).join('') +
         '</tr>';
     }).join('');
+
+    bindPreviewEditing();
+    bindColumnResizers();
+  }
+
+  function bindPreviewEditing() {
+    normPreviewBody.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
+      const syncCell = () => {
+        const rowIndex = Number(cell.dataset.rowIndex);
+        const colIndex = Number(cell.dataset.colIndex);
+        if (!Number.isInteger(rowIndex) || !Number.isInteger(colIndex)) return;
+        if (!NormState.normalized || !NormState.normalized[rowIndex]) return;
+
+        let value = String(cell.textContent || '').trim();
+
+        // Assigned To (col 7) cannot be 'Design'. Azure expects empty or valid user.
+        if (colIndex === 7 && value.toLowerCase() === 'design') {
+          value = '';
+          cell.textContent = '';
+          showNormToast('En "Assigned To", el valor "Design" no es válido. Se dejó vacío.', 'info');
+        }
+
+        if (colIndex === 7 && normCleanAssignee.checked && value) {
+          value = value.replace(/\s*<[^>]+>/, '').trim();
+          cell.textContent = value;
+        }
+
+        NormState.normalized[rowIndex][colIndex] = value;
+      };
+
+      cell.addEventListener('input', syncCell);
+      cell.addEventListener('blur', syncCell);
+    });
+  }
+
+  function bindColumnResizers() {
+    normPreviewHead.querySelectorAll('.norm-col-resizer').forEach(handle => {
+      handle.addEventListener('mousedown', event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const colIndex = Number(handle.dataset.colIndex);
+        if (!Number.isInteger(colIndex)) return;
+
+        const startX = event.clientX;
+        const startWidth = Number(NormState.columnWidths[colIndex]) || DEFAULT_COLUMN_WIDTHS[colIndex] || 180;
+
+        const onMouseMove = moveEvent => {
+          const delta = moveEvent.clientX - startX;
+          const newWidth = Math.max(70, Math.min(1000, startWidth + delta));
+          NormState.columnWidths[colIndex] = newWidth;
+          applyColumnWidths();
+        };
+
+        const onMouseUp = () => {
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+    });
+  }
+
+  function ensureColumnWidths() {
+    if (!Array.isArray(NormState.columnWidths) || NormState.columnWidths.length !== TARGET_HEADERS.length) {
+      NormState.columnWidths = [...DEFAULT_COLUMN_WIDTHS];
+    }
+  }
+
+  function applyColumnWidths() {
+    if (!normPreviewTable) return;
+
+    const existingColgroup = normPreviewTable.querySelector('colgroup');
+    if (existingColgroup) existingColgroup.remove();
+
+    const colgroup = document.createElement('colgroup');
+    NormState.columnWidths.forEach(width => {
+      const col = document.createElement('col');
+      col.style.width = `${width}px`;
+      colgroup.appendChild(col);
+    });
+
+    normPreviewTable.insertBefore(colgroup, normPreviewHead);
+  }
+
+  function validateNormalizedRows() {
+    const issues = [];
+    if (!Array.isArray(NormState.normalized)) return issues;
+
+    NormState.normalized.forEach((row, index) => {
+      const dataRowNumber = index + 1;
+      const workItemType = String(row[1] || '').trim().toLowerCase();
+      const title = String(row[2] || '').trim();
+      const testStep = String(row[3] || '').trim();
+      const stepAction = String(row[4] || '').trim();
+      const stepExpected = String(row[5] || '').trim();
+      const areaPath = String(row[6] || '').trim();
+      const assignedTo = String(row[7] || '').trim().toLowerCase();
+
+      const isTestCase = workItemType === 'test case';
+      const isStepRow = workItemType === '' && testStep !== '';
+
+      if (assignedTo === 'design') {
+        issues.push({ row: dataRowNumber, message: 'Assigned To no puede ser "Design".' });
+      }
+      if (isTestCase && !title) {
+        issues.push({ row: dataRowNumber, message: 'Test Case sin título (Title).' });
+      }
+      if (isTestCase && !areaPath) {
+        issues.push({ row: dataRowNumber, message: 'Test Case sin Area Path.' });
+      }
+      if (isStepRow && !stepAction && !stepExpected) {
+        issues.push({ row: dataRowNumber, message: 'Paso sin Step Action y sin Step Expected.' });
+      }
+    });
+
+    return issues;
   }
 
   // ─── Download ─────────────────────────────────────────────────────
   function downloadNormalized() {
     if (!NormState.normalized) return;
+
+    const issues = validateNormalizedRows();
+    if (issues.length) {
+      const maxRowsToShow = 25;
+      const detailLines = issues
+        .slice(0, maxRowsToShow)
+        .map(issue => `- Fila ${issue.row}: ${issue.message}`)
+        .join('\n');
+      const remaining = issues.length - maxRowsToShow;
+      const suffix = remaining > 0 ? `\n... y ${remaining} problema(s) más.` : '';
+
+      showNormToast(`Se detectaron ${issues.length} fila(s) con valores inválidos.`, 'error');
+      window.alert(`No se puede descargar todavía. Corrige estos datos antes de exportar:\n\n${detailLines}${suffix}`);
+      return;
+    }
 
     const allRows = [TARGET_HEADERS, ...NormState.normalized];
 
@@ -358,6 +533,7 @@
     NormState.headers   = null;
     NormState.fileName  = null;
     NormState.normalized = null;
+    NormState.columnWidths = [...DEFAULT_COLUMN_WIDTHS];
 
     normFileInput.value = '';
     normOptions.style.display       = 'none';
@@ -367,6 +543,7 @@
     normPreviewHead.innerHTML       = '';
     normPreviewBody.innerHTML       = '';
     normAreaPathInput.value         = '';
+    normAssigneeEmailInput.value    = '';
     normStateInput.value            = 'Design';
     normCleanAssignee.checked       = true;
     normClearId.checked             = true;
