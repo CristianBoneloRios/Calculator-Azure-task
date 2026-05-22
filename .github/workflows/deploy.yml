@@ -40,15 +40,42 @@ jobs:
             exit 1
           fi
 
-          lftp -e "
-            set ftp:passive-mode true;
-            set ftp:ssl-allow false;
-            set net:timeout 30;
-            set net:max-retries 5;
-            set net:reconnect-interval-base 5;
-            set net:reconnect-interval-max 30;
-            open -p 21 ftp://$FTP_SERVER_CLEAN;
-            user \"$FTP_USERNAME_CLEAN\" \"$FTP_PASSWORD_CLEAN\";
-            mirror -R --delete --verbose --parallel=2 --exclude-glob .git* --exclude .github ./ /public_html/;
-            bye
-          "
+          CANDIDATE_USERS="$FTP_USERNAME_CLEAN"
+          if printf '%s' "$FTP_USERNAME_CLEAN" | grep -q '\.'; then
+            SHORT_USER="$(printf '%s' "$FTP_USERNAME_CLEAN" | cut -d '.' -f1)"
+            CANDIDATE_USERS="$CANDIDATE_USERS $SHORT_USER"
+          fi
+
+          for PROTOCOL in ftp ftps; do
+            for USERNAME in $CANDIDATE_USERS; do
+              echo "Intentando deploy con protocol=$PROTOCOL user=$USERNAME"
+
+              if [ "$PROTOCOL" = "ftps" ]; then
+                SSL_SETTINGS="set ftp:ssl-force true; set ftp:ssl-protect-data true; set ssl:verify-certificate false;"
+              else
+                SSL_SETTINGS="set ftp:ssl-allow false;"
+              fi
+
+              if lftp -e "
+                set cmd:fail-exit true;
+                set ftp:passive-mode true;
+                set net:timeout 30;
+                set net:max-retries 2;
+                set net:reconnect-interval-base 5;
+                set net:reconnect-interval-max 15;
+                $SSL_SETTINGS
+                open -p 21 $PROTOCOL://$FTP_SERVER_CLEAN;
+                user \"$USERNAME\" \"$FTP_PASSWORD_CLEAN\";
+                mirror -R --delete --verbose --parallel=2 --exclude-glob .git* --exclude .github ./ /public_html/;
+                bye
+              "; then
+                echo "Deploy FTP completado con protocol=$PROTOCOL user=$USERNAME"
+                exit 0
+              fi
+
+              echo "Fallo con protocol=$PROTOCOL user=$USERNAME"
+            done
+          done
+
+          echo "No fue posible autenticar con ninguna combinacion. Verifica usuario exacto en Hostinger FTP Accounts."
+          exit 1
