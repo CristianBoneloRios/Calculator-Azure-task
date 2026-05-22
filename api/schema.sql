@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS users (
     full_name VARCHAR(150) NOT NULL,
     email VARCHAR(190) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
+    two_factor_secret VARCHAR(255) DEFAULT NULL,
+    two_factor_enabled TINYINT(1) NOT NULL DEFAULT 0,
     role VARCHAR(50) NOT NULL DEFAULT 'member',
     profile_photo_path VARCHAR(255) DEFAULT NULL,
     last_login_at DATETIME DEFAULT NULL,

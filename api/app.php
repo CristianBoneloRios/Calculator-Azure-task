@@ -106,6 +106,81 @@ function authenticateUser(string $email, string $password): ?array
     return $user;
 }
 
+function registerUserAccount(string $fullName, string $email, string $password): array
+{
+    $cleanName = trim($fullName);
+    $cleanEmail = strtolower(trim($email));
+
+    if ($cleanName === '' || mb_strlen($cleanName) < 3) {
+        throw new InvalidArgumentException('El nombre debe tener al menos 3 caracteres.');
+    }
+
+    if (!filter_var($cleanEmail, FILTER_VALIDATE_EMAIL)) {
+        throw new InvalidArgumentException('Correo invalido.');
+    }
+
+    if (strlen($password) < 8) {
+        throw new InvalidArgumentException('La contrasena debe tener al menos 8 caracteres.');
+    }
+
+    $stmt = db()->prepare('INSERT INTO users (full_name, email, password_hash, role, last_login_at, last_seen_at) VALUES (:full_name, :email, :password_hash, :role, NULL, NULL)');
+
+    try {
+        $stmt->execute([
+            'full_name' => $cleanName,
+            'email' => $cleanEmail,
+            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+            'role' => 'member',
+        ]);
+    } catch (PDOException $exception) {
+        $sqlState = (string) $exception->getCode();
+        if ($sqlState === '23000') {
+            throw new RuntimeException('Ya existe una cuenta con ese correo.');
+        }
+        throw $exception;
+    }
+
+    $userId = (int) db()->lastInsertId();
+    $userStmt = db()->prepare('SELECT * FROM users WHERE id = :id LIMIT 1');
+    $userStmt->execute(['id' => $userId]);
+    $user = $userStmt->fetch();
+
+    if (!$user) {
+        throw new RuntimeException('No se pudo recuperar el usuario registrado.');
+    }
+
+    return $user;
+}
+
+function generateTwoFactorSecret(): string
+{
+    return bin2hex(random_bytes(20));
+}
+
+function verifyTwoFactorCode(string $secret, string $code): bool
+{
+    if (strlen($code) !== 6 || !ctype_digit($code)) {
+        return false;
+    }
+
+    // TOTP: Time-based One-Time Password
+    $time = floor(time() / 30);
+    $hmacs = [];
+
+    for ($i = -1; $i <= 1; $i++) {
+        $timestamp = pack('J', $time + $i);
+        $hmac = hash_hmac('sha1', $timestamp, hex2bin($secret), true);
+        $offset = ord($hmac[19]) & 0xf;
+        $code_int = (ord($hmac[$offset]) & 0x7f) << 24 |
+                    (ord($hmac[$offset + 1]) & 0xff) << 16 |
+                    (ord($hmac[$offset + 2]) & 0xff) << 8 |
+                    (ord($hmac[$offset + 3]) & 0xff);
+        $hmacs[] = str_pad($code_int % 1000000, 6, '0', STR_PAD_LEFT);
+    }
+
+    return in_array($code, $hmacs, true);
+}
+
 function sanitizeUser(array $user): array
 {
     return [

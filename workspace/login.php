@@ -31,55 +31,106 @@ try {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Iniciar sesion | Workspace</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <title>Iniciar sesion | Azure Task Suite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <link rel="stylesheet" href="assets/workspace.css">
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-bold-rounded/css/uicons-bold-rounded.css" />
+  <link rel="stylesheet" href="../styles.css">
 </head>
-<body>
-  <main class="container py-5">
-    <div class="row justify-content-center">
-      <div class="col-lg-5">
-        <div class="workspace-panel">
-          <div class="mb-4">
-            <span class="eyebrow">Acceso protegido</span>
-            <h1 class="h2 mt-2">Inicia sesion en tu workspace</h1>
-            <p class="workspace-muted mb-0">Desde aqui se gestionan perfil, notas, tareas, metas, calendario y futuras integraciones con Teams.</p>
-          </div>
-
-          <?php if ($bootstrapError !== null): ?>
-            <div class="alert alert-warning" role="alert">
-              <strong>El workspace no pudo iniciar en este servidor.</strong><br>
-              <?php echo htmlspecialchars($bootstrapError, ENT_QUOTES, 'UTF-8'); ?>
-            </div>
-          <?php endif; ?>
-
-          <form id="loginForm" class="workspace-form">
-            <div>
-              <label for="loginEmail" class="form-label">Correo</label>
-              <input type="email" class="form-control" id="loginEmail" value="<?php echo htmlspecialchars(function_exists('env') ? (string) env('APP_DEFAULT_ADMIN_EMAIL', 'admin@azuretask.local') : loginEnvFallback('APP_DEFAULT_ADMIN_EMAIL', 'admin@azuretask.local'), ENT_QUOTES, 'UTF-8'); ?>" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?> required>
-            </div>
-            <div>
-              <label for="loginPassword" class="form-label">Contrasena</label>
-              <input type="password" class="form-control" id="loginPassword" placeholder="Ingresa la contrasena configurada en el entorno" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?> required>
-            </div>
-            <div class="workspace-actions">
-              <button type="submit" class="btn btn-primary" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?>><i class="fas fa-right-to-bracket"></i> Entrar</button>
-              <a href="../index.php" class="btn btn-outline-light">Volver</a>
-            </div>
-          </form>
-
-          <div class="workspace-calendar-banner mt-4">
-            <strong>Credenciales iniciales generadas desde el entorno</strong>
-            <p class="mb-0 workspace-muted">Recomendado: entrar una vez y luego cambiar la contrasena desde Perfil.</p>
-          </div>
+<body class="auth-page-body">
+  <header class="app-header">
+    <div class="header-left">
+      <a class="sidebar-toggle-btn" href="../index.php" title="Volver al inicio">
+        <i class="fas fa-arrow-left"></i>
+      </a>
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="fi fi-br-rocket-lunch"></i>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Azure Task Suite</span>
+          <span class="brand-sub">Acceso al Workspace</span>
         </div>
       </div>
     </div>
+    <div class="header-center">
+      <div class="header-chips">
+        <span class="chip chip-blue"><i class="fas fa-shield"></i> Seguro</span>
+        <span class="chip chip-green"><i class="fas fa-user-check"></i> Sesion</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <a href="register.php" class="btn btn-primary">
+        <i class="fas fa-user-plus"></i> Registrarme
+      </a>
+    </div>
+  </header>
+
+  <main class="auth-main">
+    <section class="auth-card">
+      <div class="auth-aside">
+        <span class="auth-kicker">Acceso protegido</span>
+        <h1>Inicia sesion en tu Workspace</h1>
+        <p>Gestiona calendario, tareas, metas y notas en la misma experiencia de Azure Task Suite.</p>
+        <ul class="auth-list">
+          <li><i class="fas fa-calendar-days"></i> Calendario integrado</li>
+          <li><i class="fas fa-list-check"></i> Gestion de tareas</li>
+          <li><i class="fas fa-bullseye"></i> Seguimiento de metas</li>
+          <li><i class="fas fa-note-sticky"></i> Notas importantes</li>
+        </ul>
+      </div>
+
+      <div class="auth-form-panel">
+        <h2>Bienvenido de nuevo</h2>
+        <p class="auth-muted">Ingresa con tu correo y contrasena.</p>
+
+        <?php if ($bootstrapError !== null): ?>
+          <div class="auth-alert" role="alert">
+            <strong>La aplicacion no pudo iniciar correctamente en el servidor.</strong><br>
+            <?php echo htmlspecialchars($bootstrapError, ENT_QUOTES, 'UTF-8'); ?>
+          </div>
+        <?php endif; ?>
+
+        <form id="loginForm" class="auth-form">
+          <div>
+            <label for="loginEmail">Correo</label>
+            <input type="email" id="loginEmail" value="<?php echo htmlspecialchars(function_exists('env') ? (string) env('APP_DEFAULT_ADMIN_EMAIL', 'admin@azuretask.local') : loginEnvFallback('APP_DEFAULT_ADMIN_EMAIL', 'admin@azuretask.local'), ENT_QUOTES, 'UTF-8'); ?>" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?> required>
+          </div>
+          <div>
+            <label for="loginPassword">Contrasena</label>
+            <input type="password" id="loginPassword" placeholder="Ingresa tu contrasena" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?> required>
+          </div>
+          <div class="auth-actions">
+            <button type="submit" class="btn btn-primary" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?>><i class="fas fa-right-to-bracket"></i> Entrar</button>
+            <a href="../index.php" class="btn btn-outline">Volver</a>
+          </div>
+        </form>
+
+        <div class="auth-switch">
+          <span>No tienes cuenta?</span>
+          <a href="register.php">Registrate aqui</a>
+        </div>
+      </div>
+    </section>
   </main>
+
+  <footer class="app-footer">
+    <div class="footer-content">
+      <div class="footer-section footer-primary">
+        <div class="footer-left"><i class="fas fa-code"></i></div>
+        <div class="footer-center">
+          <span class="footer-powered">Powered by</span>
+          <span class="footer-name">Cristian Jesus Bonelo Rios</span>
+          <span class="footer-sep">|</span>
+          <span class="footer-role">SOFTWARE QUALITY ANALYST</span>
+          <span class="footer-sep">|</span>
+          <span class="footer-dept">DEVELOPMENT &amp; INNOVATION</span>
+        </div>
+        <div class="footer-right"><span class="footer-version">Workspace</span></div>
+      </div>
+    </div>
+  </footer>
 
   <script>
     document.getElementById('loginForm').addEventListener('submit', async event => {
@@ -89,23 +140,39 @@ try {
         return;
       }
 
-      const response = await fetch('../api/auth.php?action=login', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: document.getElementById('loginEmail').value,
-          password: document.getElementById('loginPassword').value
-        })
-      });
+      try {
+        const response = await fetch('../api/auth.php?action=login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('loginEmail').value,
+            password: document.getElementById('loginPassword').value
+          })
+        });
 
-      const data = await response.json();
-      if (!response.ok || data.ok === false) {
-        alert(data.message || 'No fue posible iniciar sesion.');
-        return;
+        let data = null;
+        try {
+          data = await response.json();
+        } catch (_) {
+          data = null;
+        }
+
+        if (!response.ok || !data || data.ok === false) {
+          const serverMessage = data && data.message ? data.message : `Error HTTP ${response.status}.`;
+          alert(`${serverMessage}\n\nSi el error persiste, valida configuracion PHP y base de datos en Hostinger.`);
+          return;
+        }
+
+        // Verificar si requiere 2FA
+        if (data.requires_2fa) {
+          window.location.href = 'verify-2fa.php';
+        } else {
+          window.location.href = 'index.php';
+        }
+      } catch (error) {
+        alert(`No se pudo conectar al backend de autenticacion.\n\nDetalle: ${error.message}`);
       }
-
-      window.location.href = 'index.php';
     });
   </script>
 </body>
