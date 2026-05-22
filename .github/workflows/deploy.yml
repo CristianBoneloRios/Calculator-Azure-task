@@ -10,15 +10,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Descargar código
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
+
+      - name: Instalar lftp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lftp
 
       - name: Subir archivos por FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 21
-          protocol: ftp
-          local-dir: ./
-          server-dir: /public_html/
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          lftp -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER" -e "
+            set ftp:passive-mode true;
+            set ftp:ssl-allow false;
+            set net:timeout 30;
+            set net:max-retries 5;
+            set net:reconnect-interval-base 5;
+            set net:reconnect-interval-max 30;
+            mirror -R --delete --verbose --parallel=2 --exclude-glob .git* --exclude .github ./ /public_html/;
+            bye
+          "
