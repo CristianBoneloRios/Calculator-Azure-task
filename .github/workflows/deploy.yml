@@ -23,13 +23,24 @@ jobs:
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
-          lftp -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER" -e "
+          FTP_SERVER_CLEAN="$(printf '%s' "$FTP_SERVER" | tr -d '\r\n' | xargs)"
+          FTP_USERNAME_CLEAN="$(printf '%s' "$FTP_USERNAME" | tr -d '\r\n' | xargs)"
+          FTP_PASSWORD_CLEAN="$(printf '%s' "$FTP_PASSWORD" | tr -d '\r\n')"
+
+          if [ -z "$FTP_SERVER_CLEAN" ] || [ -z "$FTP_USERNAME_CLEAN" ] || [ -z "$FTP_PASSWORD_CLEAN" ]; then
+            echo "Uno o mas secrets FTP estan vacios."
+            exit 1
+          fi
+
+          lftp -e "
             set ftp:passive-mode true;
             set ftp:ssl-allow false;
             set net:timeout 30;
             set net:max-retries 5;
             set net:reconnect-interval-base 5;
             set net:reconnect-interval-max 30;
+            open -p 21 ftp://$FTP_SERVER_CLEAN;
+            user \"$FTP_USERNAME_CLEAN\" \"$FTP_PASSWORD_CLEAN\";
             mirror -R --delete --verbose --parallel=2 --exclude-glob .git* --exclude .github ./ /public_html/;
             bye
           "
