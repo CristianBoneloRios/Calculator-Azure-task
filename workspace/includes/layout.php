@@ -14,7 +14,6 @@ function workspaceLayoutStart(string $title, string $activePage, array $user): v
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?php echo htmlspecialchars($title, ENT_QUOTES, 'UTF-8'); ?></title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -88,16 +87,25 @@ function workspaceLayoutStart(string $title, string $activePage, array $user): v
 
           <div class="nav-section">
             <span class="nav-section-label">Sesion</span>
-            <div class="workspace-access-card is-active">
-              <div class="workspace-access-header">
-                <span class="workspace-status-dot"></span>
-                <span class="workspace-status-text">Sesion activa</span>
+            <div class="about-me-btn" style="cursor:default;margin-bottom:8px;">
+              <?php if ($photo): ?>
+                <div class="about-me-btn-avatar">
+                  <img src="<?php echo htmlspecialchars($photo, ENT_QUOTES, 'UTF-8'); ?>" alt="Foto de perfil" />
+                </div>
+              <?php else: ?>
+                <div class="about-me-btn-avatar">
+                  <i class="fas fa-user"></i>
+                </div>
+              <?php endif; ?>
+              <div class="about-me-btn-info">
+                <span class="about-me-btn-name"><?php echo htmlspecialchars($user['full_name'], ENT_QUOTES, 'UTF-8'); ?></span>
+                <span class="about-me-btn-role" style="color:var(--accent-green);">&#9679; Sesion activa</span>
               </div>
-              <p><?php echo htmlspecialchars((string) ($user['last_login_at'] ?? 'Primer ingreso'), ENT_QUOTES, 'UTF-8'); ?></p>
-              <a class="btn btn-danger btn-sm workspace-auth-btn" href="logout.php">
-                <i class="fas fa-right-from-bracket"></i> Cerrar sesion
-              </a>
             </div>
+            <a class="nav-item" href="logout.php" style="color:var(--accent-red,#ef4444);">
+              <span class="nav-icon"><i class="fas fa-right-from-bracket"></i></span>
+              <span class="nav-label">Cerrar sesion</span>
+            </a>
           </div>
         </nav>
 
@@ -142,78 +150,88 @@ function workspaceLayoutEnd(): void
 
   <footer class="app-footer">
     <div class="footer-content">
-      <div class="footer-left d-flex align-items-center gap-2">
-        <img src="https://media.licdn.com/dms/image/v2/D5603AQF_Y5pnaolD5g/profile-displayphoto-scale_400_400/B56ZiucgVJHcAg-/0/1755273365460?e=1781136000&v=beta&t=zxALSfRgKjZz0GeAv-HO7G68ASoWSSwIrKPZiK9TFJA" alt="Foto Cristian Bonelo" class="footer-avatar" width="36" height="36" style="border-radius:50%;object-fit:cover;border:2px solid var(--accent-blue);box-shadow:0 2px 8px #0003;" loading="lazy">
-        <div class="d-none d-md-block">
-          <span class="footer-powered">Desarrollado por</span>
-          <a href="https://www.linkedin.com/in/cristiandevbonelo/" target="_blank" rel="noopener" class="footer-name">Cristian Jesus Bonelo Rios</a>
+      <div class="footer-section footer-primary">
+        <div class="footer-left">
+          <i class="fas fa-code"></i>
+        </div>
+        <div class="footer-center">
+          <span class="footer-powered">Powered by</span>
+          <span class="footer-name">Cristian Jesus Bonelo Rios</span>
+          <span class="footer-sep">|</span>
+          <span class="footer-role">SOFTWARE QUALITY ANALYST</span>
+          <span class="footer-sep">|</span>
+          <span class="footer-dept">DEVELOPMENT &amp; INNOVATION</span>
+        </div>
+        <div class="footer-right">
+          <span class="footer-version">v1.0.0</span>
         </div>
       </div>
-      <div class="footer-center d-flex flex-column flex-md-row align-items-center gap-1 gap-md-3">
-        <span class="footer-role">SOFTWARE QUALITY ANALYST</span>
-        <span class="footer-sep d-none d-md-inline">|</span>
-        <span class="footer-dept">DEVELOPMENT &amp; INNOVATION</span>
-        <span class="footer-sep d-none d-md-inline">|</span>
-        <a href="https://cristiandevbonelo.github.io/porfoliocristian/" target="_blank" rel="noopener" class="footer-link"><i class="fas fa-globe"></i> Portafolio</a>
-        <span class="footer-sep d-none d-md-inline">|</span>
-        <a href="mailto:cristiandevbonelo@gmail.com" class="footer-link" title="Contáctame"><i class="fas fa-envelope"></i> Contacto</a>
-        <span class="footer-sep d-none d-md-inline">|</span>
-        <a href="https://www.linkedin.com/in/cristiandevbonelo/" target="_blank" rel="noopener" class="footer-link" title="LinkedIn"><i class="fab fa-linkedin"></i></a>
-        <a href="https://github.com/cristiandevbonelo" target="_blank" rel="noopener" class="footer-link" title="GitHub"><i class="fab fa-github"></i></a>
+
+      <div class="footer-section footer-socials">
+        <span class="footer-section-title"><i class="fas fa-share-alt"></i> Redes Sociales</span>
+        <div class="footer-social-links">
+          <a href="https://cristiandevbonelo.github.io/porfoliocristian/" target="_blank" rel="noopener noreferrer" aria-label="Portafolio">
+            <i class="fas fa-globe"></i>
+            <span>Portafolio</span>
+          </a>
+          <a href="#" aria-label="LinkedIn pendiente">
+            <i class="fab fa-linkedin"></i>
+            <span>LinkedIn (pendiente)</span>
+          </a>
+          <a href="https://github.com/CristianBoneloRios" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+            <i class="fab fa-github"></i>
+            <span>GitHub</span>
+          </a>
+        </div>
       </div>
-      <div class="footer-right d-flex flex-column align-items-end gap-1">
-        <span class="footer-version">v1.0.0</span>
-        <span class="footer-date" id="footerDate"></span>
-        <span class="footer-status"><i class="fas fa-circle" style="color:var(--accent-green);font-size:8px;"></i> Online</span>
+
+      <div class="footer-section footer-photo-block">
+        <div class="footer-photo-wrap" id="footerPhotoWrap">
+          <img class="footer-photo-thumb" src="https://cristiandevbonelo.github.io/porfoliocristian/assets/1755273365367.jpg" alt="Foto de Cristian Bonelo" loading="lazy" />
+        </div>
       </div>
     </div>
-    <div class="footer-bottom text-center mt-1" style="font-size:10px;color:var(--text-3);">
-      &copy; <?php echo date('Y'); ?> Cristian Bonelo. Todos los derechos reservados.
-    </div>
-    <script>
-      // Fecha y hora en vivo en el footer
-      function updateFooterDate() {
-        const el = document.getElementById('footerDate');
-        if (!el) return;
-        const now = new Date();
-        const opts = { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' };
-        el.textContent = now.toLocaleString('es-CO', opts) + ' (GMT' + (now.getTimezoneOffset()/-60) + ')';
-      }
-      setInterval(updateFooterDate, 1000);
-      updateFooterDate();
-    </script>
   </footer>
 
-  <div class="toast-container position-fixed bottom-0 end-0 p-3" id="workspaceToastContainer"></div>
+  <div class="photo-hover-backdrop" id="footerPhotoPreviewBackdrop" aria-hidden="true">
+    <img class="photo-hover-preview" id="footerPhotoPreviewImg" src="https://cristiandevbonelo.github.io/porfoliocristian/assets/1755273365367.jpg" alt="Vista ampliada de foto" loading="lazy" />
+  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <div id="workspaceToastContainer"></div>
   <script src="assets/workspace.js"></script>
   <script>
     (function () {
+      // Sidebar toggle
       const toggle = document.getElementById('sidebarToggleBtn');
       const sidebar = document.getElementById('sidebar');
       const overlay = document.getElementById('sidebarOverlay');
 
-      if (!toggle || !sidebar || !overlay) {
-        return;
-      }
-
-      function closeSidebar() {
-        sidebar.classList.remove('mobile-open');
-        overlay.classList.remove('visible');
-      }
-
-      toggle.addEventListener('click', function () {
-        const isMobile = window.innerWidth <= 768;
-        if (isMobile) {
-          sidebar.classList.toggle('mobile-open');
-          overlay.classList.toggle('visible');
-        } else {
-          sidebar.classList.toggle('collapsed');
+      if (toggle && sidebar && overlay) {
+        function closeSidebar() {
+          sidebar.classList.remove('mobile-open');
+          overlay.classList.remove('visible');
         }
-      });
+        toggle.addEventListener('click', function () {
+          const isMobile = window.innerWidth <= 768;
+          if (isMobile) {
+            sidebar.classList.toggle('mobile-open');
+            overlay.classList.toggle('visible');
+          } else {
+            sidebar.classList.toggle('collapsed');
+          }
+        });
+        overlay.addEventListener('click', closeSidebar);
+      }
 
-      overlay.addEventListener('click', closeSidebar);
+      // Footer photo hover (same as app.js initFooterPhotoHoverPreview)
+      if (window.matchMedia('(hover: hover)').matches) {
+        const wrap    = document.getElementById('footerPhotoWrap');
+        const backdrop = document.getElementById('footerPhotoPreviewBackdrop');
+        if (wrap && backdrop) {
+          wrap.addEventListener('mouseenter', function () { backdrop.classList.add('active'); });
+          wrap.addEventListener('mouseleave', function () { backdrop.classList.remove('active'); });
+        }
+      }
     }());
   </script>
 </body>

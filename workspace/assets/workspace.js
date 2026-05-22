@@ -41,23 +41,27 @@ async function apiRequest(action, options = {}) {
 }
 
 function showWorkspaceToast(message, variant = 'primary') {
-  if (!workspaceToastContainer || typeof bootstrap === 'undefined') {
+  if (!workspaceToastContainer) {
     return;
   }
 
-  const wrapper = document.createElement('div');
-  wrapper.className = 'toast align-items-center text-bg-dark border border-secondary';
-  wrapper.setAttribute('role', 'status');
-  wrapper.innerHTML = `
-    <div class="d-flex">
-      <div class="toast-body"><span class="badge bg-${variant} me-2">Info</span>${message}</div>
-      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
-    </div>`;
+  const icons = {
+    danger:  'fa-circle-xmark',
+    success: 'fa-circle-check',
+    warning: 'fa-triangle-exclamation',
+    primary: 'fa-circle-info',
+  };
+  const icon = icons[variant] || icons.primary;
 
-  workspaceToastContainer.appendChild(wrapper);
-  const toast = new bootstrap.Toast(wrapper, { delay: 2600 });
-  toast.show();
-  wrapper.addEventListener('hidden.bs.toast', () => wrapper.remove());
+  const toast = document.createElement('div');
+  toast.className = `ws-toast ${variant}`;
+  toast.innerHTML = `<i class="fas ${icon}"></i><span>${message}</span>`;
+  workspaceToastContainer.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('hiding');
+    setTimeout(() => toast.remove(), 350);
+  }, 2600);
 }
 
 function renderEmptyState(container, message) {
