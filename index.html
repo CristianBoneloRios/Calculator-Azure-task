@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Azure Task Suite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-bold-rounded/css/uicons-bold-rounded.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%233b82f6' width='100' height='100'/><text x='50' y='70' font-size='60' font-weight='bold' fill='white' text-anchor='middle'>\u03A3</text></svg>" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ═══════════════ HEADER ═══════════════ -->
+  <header class="app-header">
+    <div class="header-left">
+      <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Toggle Sidebar">
+        <i class="fas fa-bars"></i>
+      </button>
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="fi fi-br-rocket-lunch"></i>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Azure Task Suite</span>
+          <span class="brand-sub">Gestión, análisis y normalización</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="header-chips">
+        <span class="chip chip-blue"><i class="fas fa-file-csv"></i> CSV</span>
+        <span class="chip chip-green"><i class="fas fa-file-excel"></i> Excel</span>
+        <span class="chip chip-purple"><i class="fas fa-screwdriver-wrench"></i> Suite</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="header-badge">
+        <i class="fas fa-chart-line"></i>
+        <span>Plataforma Azure DevOps</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════ SIDEBAR OVERLAY ═══════════════ -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- ═══════════════ LAYOUT ═══════════════ -->
+  <div class="app-layout">
+
+    <!-- ═══════════════ SIDEBAR ═══════════════ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-inner">
+
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <span class="nav-section-label">Navegación</span>
+            <a href="#upload-section" class="nav-item active" data-section="upload-section">
+              <span class="nav-icon"><i class="fas fa-cloud-upload-alt"></i></span>
+              <span class="nav-label">Cargar Archivos</span>
+            </a>
+            <a href="#summary-section" class="nav-item" data-section="summary-section">
+              <span class="nav-icon"><i class="fas fa-chart-pie"></i></span>
+              <span class="nav-label">Estadísticas</span>
+            </a>
+            <a href="#results-section" class="nav-item" data-section="results-section">
+              <span class="nav-icon"><i class="fas fa-table"></i></span>
+              <span class="nav-label">Resultados</span>
+            </a>
+            <a href="#normalizer-section" class="nav-item" data-section="normalizer-section">
+              <span class="nav-icon"><i class="fas fa-magic"></i></span>
+              <span class="nav-label">Normalizar CSV</span>
+            </a>
+          </div>
+
+          <div class="nav-section">
+            <span class="nav-section-label">Archivos Cargados</span>
+            <div class="file-history" id="fileHistory">
+              <div class="empty-history">
+                <i class="fas fa-inbox"></i>
+                <p>No hay archivos</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="nav-section">
+            <span class="nav-section-label">Acerca de</span>
+            <a class="about-me-btn" href="workspace/login.php" title="Iniciar sesion en Workspace">
+              <i class="fas fa-right-to-bracket" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent-green);"></i>
+              <div class="about-me-btn-info">
+                <span class="about-me-btn-name">Iniciar sesión</span>
+                <span class="about-me-btn-role">Acceder al Workspace</span>
+              </div>
+              <i class="fas fa-arrow-right about-me-btn-arrow"></i>
+            </a>
+            <a class="about-me-btn" href="workspace/register.php" title="Registrarse en Workspace">
+              <i class="fas fa-user-plus" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent-cyan);"></i>
+              <div class="about-me-btn-info">
+                <span class="about-me-btn-name">Registrarme</span>
+                <span class="about-me-btn-role">Crear cuenta nueva</span>
+              </div>
+              <i class="fas fa-arrow-right about-me-btn-arrow"></i>
+            </a>
+            <button class="about-me-btn" id="aboutMeBtn">
+              <div class="about-me-btn-avatar">
+                <img id="aboutMeAvatarThumb" src="" alt="" style="display:none"/>
+                <i class="fas fa-user" id="aboutMeAvatarIcon"></i>
+              </div>
+              <div class="about-me-btn-info">
+                <span class="about-me-btn-name">Cristian Bonelo Rios</span>
+                <span class="about-me-btn-role">Software Quality Analyst</span>
+              </div>
+              <i class="fas fa-arrow-right about-me-btn-arrow"></i>
+            </button>
+            <button class="about-me-btn" id="diagnosticoBtn" title="Ver estado del backend y rutas del sistema">
+              <i class="fas fa-stethoscope" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent-blue);"></i>
+              <div class="about-me-btn-info">
+                <span class="about-me-btn-name">Diagnóstico</span>
+                <span class="about-me-btn-role">Estado del sistema</span>
+              </div>
+              <i class="fas fa-arrow-right about-me-btn-arrow"></i>
+            </button>
+            <div class="sidebar-info-card">
+              <i class="fas fa-info-circle"></i>
+              <p>Soporta archivos exportados desde <strong>Azure DevOps</strong> en formato CSV y Excel (.xlsx, .xls).</p>
+            </div>
+            <div class="sidebar-info-card accent-green">
+              <i class="fas fa-lightbulb"></i>
+              <p>Detecta automáticamente columnas de <strong>horas completadas</strong>, <strong>estimación</strong> y <strong>trabajo restante</strong>.</p>
+            </div>
+          </div>
+        </nav>
+
+        <div class="sidebar-footer-brand">
+          <i class="fab fa-microsoft"></i>
+          <span>Azure DevOps Compatible</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══════════════ ABOUT ME MODAL ═══════════════ -->
+    <div class="about-modal-backdrop" id="aboutModalBackdrop"></div>
+    <div class="about-modal" id="aboutModal">
+      <button class="about-modal-close" id="aboutModalClose" title="Cerrar">
+        <i class="fas fa-times"></i>
+      </button>
+
+      <div class="about-modal-header">
+        <div class="about-modal-avatar-wrap">
+          <div class="about-modal-avatar" id="aboutModalAvatar">
+            <img id="aboutModalAvatarImg" src="" alt="Cristian Bonelo" style="display:none"/>
+            <i class="fas fa-user" id="aboutModalAvatarIcon"></i>
+          </div>
+          <label class="about-modal-avatar-edit" for="aboutPhotoInput" title="Cambiar foto">
+            <i class="fas fa-camera"></i>
+          </label>
+          <input type="file" id="aboutPhotoInput" accept="image/*" hidden />
+          <div class="about-modal-avatar-ring"></div>
+        </div>
+        <div class="about-modal-identity">
+          <h2>Cristian Jesus Bonelo Rios</h2>
+          <p class="about-modal-role">Software Quality Analyst – Development &amp; Innovation</p>
+          <p class="about-modal-company"><i class="fas fa-building"></i> Olimpia IT</p>
+          <div class="about-modal-tags">
+            <span><i class="fas fa-shield-alt"></i> QA</span>
+            <span><i class="fas fa-robot"></i> IA</span>
+            <span><i class="fas fa-infinity"></i> DevOps</span>
+            <span><i class="fas fa-lightbulb"></i> Innovación</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="about-modal-divider"></div>
+
+      <div class="about-modal-bio">
+        <p>
+          Soy <strong>Software Quality Analyst</strong> en <strong>Olimpia IT</strong>, con un fuerte enfoque en
+          desarrollo e innovación, especializado en la mejora continua y optimización de procesos de software.
+          Cuento con experiencia en la implementación de herramientas de <strong>inteligencia artificial</strong>
+          para automatizar, analizar y fortalecer los procesos de aseguramiento de la calidad, contribuyendo a
+          productos más eficientes, confiables y alineados con los objetivos del negocio.
+        </p>
+        <p>
+          Me destaco por el uso de herramientas de gestión de proyectos como <strong>Azure DevOps</strong>, las cuales
+          me permiten planificar, supervisar y optimizar el ciclo de vida del desarrollo de software, garantizando
+          trazabilidad, control de calidad y mejora constante. Mi enfoque analítico y orientado a resultados facilita
+          la identificación de oportunidades de optimización, la reducción de riesgos y la adopción de buenas
+          prácticas dentro de los equipos de trabajo.
+        </p>
+        <p>
+          Estoy comprometido con la <strong>excelencia técnica</strong>, la <strong>innovación continua</strong> y la
+          entrega de soluciones de alto valor, aportando activamente a la transformación digital y al fortalecimiento
+          de los procesos organizacionales en Olimpia IT.
+        </p>
+
+        <div class="about-modal-publish-box">
+          <div class="about-modal-publish-text">
+            <h4><i class="fab fa-github"></i> Publicar Foto Global</h4>
+            <p>Guarda la foto actual en el repositorio para que todos los dispositivos la vean.</p>
+          </div>
+          <button class="btn btn-primary" id="publishPhotoBtn">
+            <i class="fas fa-cloud-upload-alt"></i> Publicar en GitHub
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
+    <main class="main-content" id="mainContent">
+
+      <!-- Upload Section -->
+      <section class="content-section" id="upload-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fas fa-cloud-upload-alt"></i> Cargar Archivos</h2>
+            <p>Sube tus archivos CSV o Excel exportados desde Azure DevOps para calcular las horas de tus tareas.</p>
+          </div>
+        </div>
+
+        <div class="upload-zone" id="uploadZone">
+          <div class="upload-zone-content">
+            <div class="upload-animation">
+              <div class="upload-circle">
+                <i class="fas fa-file-upload"></i>
+              </div>
+              <div class="upload-ripple"></div>
+              <div class="upload-ripple delay-1"></div>
+            </div>
+            <h3>Arrastra y suelta tus archivos aquí</h3>
+            <p>o elige una opción para cargar</p>
+            <div class="upload-formats">
+              <span><i class="fas fa-file-csv"></i> .CSV</span>
+              <span><i class="fas fa-file-excel"></i> .XLSX</span>
+              <span><i class="fas fa-file-excel"></i> .XLS</span>
+            </div>
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" multiple hidden />
+            <div class="upload-button-group">
+              <button class="btn btn-primary btn-lg" id="selectFilesBtn">
+                <i class="fas fa-folder-open"></i> Seleccionar Archivos
+              </button>
+              <span class="upload-divider">o</span>
+              <button class="btn btn-azure btn-lg" id="connectAzureBtn">
+                <i class="fab fa-microsoft"></i> Conectar Azure DevOps
+              </button>
+            </div>
+          </div>
+          <!-- Azure connected strip: shown when connected -->
+          <div class="azure-connected-strip" id="azureConnectedStrip" style="display:none">
+            <div class="azure-strip-info">
+              <i class="fab fa-microsoft"></i>
+              <span>Azure DevOps conectado &mdash; <strong id="azureConnectedProject"></strong></span>
+            </div>
+            <button class="btn btn-azure btn-sm" id="azureShowTasksBtn">
+              <i class="fas fa-tasks"></i> <span id="azureShowTasksBtnLabel">Mostrar tareas</span>
+            </button>
+          </div>
+          <div class="upload-drag-overlay">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Suelta los archivos aquí</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Stats Section -->
+
+      <!-- Azure Tasks Section -->
+      <section class="content-section azure-tasks-section" id="azureTasksSection" style="display:none">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fab fa-microsoft"></i> Tareas de Azure DevOps</h2>
+            <p id="azureTasksSummaryText">Cargando tareas...</p>
+          </div>
+          <div class="section-actions">
+            <button class="btn btn-azure btn-sm" id="azureReloadBtn">
+              <i class="fas fa-sync-alt"></i> Recargar
+            </button>
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="azure-filters">
+          <div class="azure-filter-group">
+            <label for="azureFilterUser"><i class="fas fa-user"></i> Usuario</label>
+            <input type="text" id="azureFilterUser" placeholder="Nombre o correo..." autocomplete="off" />
+          </div>
+          <div class="azure-filter-group">
+            <label for="azureFilterState"><i class="fas fa-tag"></i> Estado</label>
+            <select id="azureFilterState">
+              <option value="">Todos los estados</option>
+            </select>
+          </div>
+          <div class="azure-filter-actions">
+            <button class="btn btn-primary btn-sm" id="azureApplyFilterBtn">
+              <i class="fas fa-filter"></i> Filtrar
+            </button>
+            <button class="btn btn-outline btn-sm" id="azureResetFilterBtn">
+              <i class="fas fa-times"></i> Limpiar
+            </button>
+          </div>
+        </div>
+
+        <!-- Skeleton loader -->
+        <div class="azure-skeleton" id="azureSkeleton" style="display:none">
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line"></div>
+        </div>
+
+        <!-- Task count badge -->
+        <div class="azure-results-meta" id="azureResultsMeta" style="display:none">
+          <span id="azureResultsCount"></span>
+        </div>
+
+        <!-- Results table -->
+        <div id="azureTasksResults"></div>
+
+        <!-- No results after filtering -->
+        <div class="azure-empty" id="azureTasksEmpty" style="display:none">
+          <i class="fas fa-search"></i>
+          <p>No se encontraron tareas con los filtros aplicados.</p>
+        </div>
+      </section>
+
+      <section class="stats-section" id="summary-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fas fa-chart-bar"></i> Resumen Global</h2>
+            <p>Estadísticas consolidadas de todos los archivos analizados.</p>
+          </div>
+          <div class="section-actions">
+            <button class="btn btn-danger btn-sm" id="clearAllBtn">
+              <i class="fas fa-trash-alt"></i> Limpiar Todo
+            </button>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card stat-blue">
+            <div class="stat-card-icon"><i class="fas fa-file-alt"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statFiles">0</span>
+              <span class="stat-label">Archivos Analizados</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-file-alt"></i></div>
+          </div>
+
+          <div class="stat-card stat-cyan">
+            <div class="stat-card-icon"><i class="fas fa-tasks"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statTasks">0</span>
+              <span class="stat-label">Tareas Totales</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-tasks"></i></div>
+          </div>
+
+          <div class="stat-card stat-green">
+            <div class="stat-card-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statCompleted">0h</span>
+              <span class="stat-label">Horas Completadas</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-check-circle"></i></div>
+          </div>
+
+          <div class="stat-card stat-orange">
+            <div class="stat-card-icon"><i class="fas fa-stopwatch"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statEstimate">0h</span>
+              <span class="stat-label">Estimación Original</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-stopwatch"></i></div>
+          </div>
+
+          <div class="stat-card stat-purple">
+            <div class="stat-card-icon"><i class="fas fa-hourglass-half"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statRemaining">0h</span>
+              <span class="stat-label">Horas Restantes</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-hourglass-half"></i></div>
+          </div>
+
+          <div class="stat-card stat-pink">
+            <div class="stat-card-icon"><i class="fas fa-percentage"></i></div>
+            <div class="stat-card-body">
+              <span class="stat-value" id="statProgress">0%</span>
+              <span class="stat-label">Progreso General</span>
+            </div>
+            <div class="stat-card-bg-icon"><i class="fas fa-percentage"></i></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Results Section -->
+      <section class="content-section" id="results-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fas fa-table"></i> Resultados por Archivo</h2>
+            <p>Detalle de horas y tareas por cada archivo cargado.</p>
+          </div>
+        </div>
+
+        <div class="results-empty-state" id="resultsEmptyState">
+          <i class="fas fa-folder-open"></i>
+          <h3>Aun no hay resultados para mostrar</h3>
+          <p>Carga archivos CSV o Excel para ver el analisis de horas por tarea y por archivo.</p>
+        </div>
+        <div id="fileResultsContainer"></div>
+      </section>
+
+      <!-- ═══════════════ NORMALIZER SECTION ═══════════════ -->
+      <section class="content-section" id="normalizer-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2><i class="fas fa-magic"></i> Normalizar CSV para Azure DevOps</h2>
+            <p>Carga un archivo descargado de Azure DevOps (CSV o Excel) y conviértelo al formato listo para re-importar.</p>
+          </div>
+        </div>
+
+        <!-- Upload zone -->
+        <div class="norm-upload-zone" id="normUploadZone">
+          <div class="norm-upload-content">
+            <div class="upload-animation">
+              <div class="upload-circle">
+                <i class="fas fa-file-upload"></i>
+              </div>
+              <div class="upload-ripple"></div>
+              <div class="upload-ripple delay-1"></div>
+            </div>
+            <h3>Arrastra y suelta tus archivos aquí</h3>
+            <p>o elige una opción para cargar</p>
+            <div class="upload-formats">
+              <span><i class="fas fa-file-csv"></i> .CSV</span>
+              <span><i class="fas fa-file-excel"></i> .XLSX</span>
+              <span><i class="fas fa-file-excel"></i> .XLS</span>
+            </div>
+            <input type="file" id="normFileInput" accept=".csv,.xlsx,.xls" hidden />
+            <button class="btn btn-primary btn-lg" id="normSelectFileBtn">
+              <i class="fas fa-folder-open"></i> Seleccionar Archivo
+            </button>
+          </div>
+          <div class="upload-drag-overlay">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Suelta el archivo aquí</span>
+          </div>
+        </div>
+
+        <!-- Options -->
+        <div class="norm-options" id="normOptions" style="display:none">
+          <div class="norm-options-grid">
+            <div class="norm-option-group">
+              <label for="normAreaPathInput"><i class="fas fa-map-signs"></i> Area Path para importar</label>
+              <input type="text" id="normAreaPathInput" value="" placeholder="ej: MiProyecto\\QA\\Automation" autocomplete="off" />
+              <span class="norm-option-hint">Si lo completas, se reemplaza la columna <strong>Area Path</strong> en el archivo normalizado.</span>
+            </div>
+            <div class="norm-option-group">
+              <label for="normStateInput"><i class="fas fa-tag"></i> Estado para Test Cases</label>
+              <input type="text" id="normStateInput" value="Design" placeholder="ej: Design, Testing, Active…" autocomplete="off" />
+              <span class="norm-option-hint">Se aplica a todas las filas de tipo <strong>Test Case</strong>. Déjalo vacío para mantener el original.</span>
+            </div>
+            <div class="norm-option-group">
+              <label><i class="fas fa-user-edit"></i> Formato "Assigned To"</label>
+              <div class="norm-toggle-group">
+                <label class="norm-toggle">
+                  <input type="checkbox" id="normCleanAssignee" checked />
+                  <span class="norm-toggle-slider"></span>
+                </label>
+                <span>Eliminar correo (<code>&lt;email@dominio.com&gt;</code>)</span>
+              </div>
+              <input type="text" id="normAssigneeEmailInput" value="" placeholder="Correo para Assigned To (ej: usuario@dominio.com)" autocomplete="off" />
+              <span class="norm-option-hint">Se detecta automáticamente desde el archivo original. Si escribes uno nuevo y desactivas "Eliminar correo", se aplicará a todos los Assigned To con nombre.</span>
+            </div>
+            <div class="norm-option-group">
+              <label><i class="fas fa-hashtag"></i> Columna ID</label>
+              <div class="norm-toggle-group">
+                <label class="norm-toggle">
+                  <input type="checkbox" id="normClearId" checked />
+                  <span class="norm-toggle-slider"></span>
+                </label>
+                <span>Limpiar IDs (Azure los asigna automáticamente)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="norm-actions">
+            <button class="btn btn-outline btn-sm" id="normClearBtn">
+              <i class="fas fa-times"></i> Limpiar
+            </button>
+            <button class="btn btn-primary" id="normDownloadBtn">
+              <i class="fas fa-download"></i> Descargar CSV Normalizado
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats bar -->
+        <div class="norm-stats-bar" id="normStatsBar" style="display:none">
+          <div class="norm-stat">
+            <i class="fas fa-file-alt"></i>
+            <span id="normStatFile">—</span>
+          </div>
+          <div class="norm-stat">
+            <i class="fas fa-vial"></i>
+            <span id="normStatCases">0 Test Cases</span>
+          </div>
+          <div class="norm-stat">
+            <i class="fas fa-list-ol"></i>
+            <span id="normStatSteps">0 pasos</span>
+          </div>
+          <div class="norm-stat">
+            <i class="fas fa-check-circle" style="color:var(--accent-green)"></i>
+            <span id="normStatReady">Listo para importar</span>
+          </div>
+        </div>
+
+        <!-- Preview table -->
+        <div class="norm-preview-wrap" id="normPreviewWrap" style="display:none">
+          <div class="norm-preview-header">
+            <span><i class="fas fa-eye"></i> Vista previa editable (todas las filas). Arrastra el borde de columnas para redimensionar.</span>
+          </div>
+          <div class="norm-preview-scroll">
+            <table class="norm-preview-table" id="normPreviewTable">
+              <thead id="normPreviewHead"></thead>
+              <tbody id="normPreviewBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div class="results-empty-state" id="normEmptyState">
+          <i class="fas fa-file-import"></i>
+          <h3>Sube un archivo para normalizar</h3>
+          <p>Carga el CSV o Excel tal como lo descargaste de Azure DevOps y obtendrás un archivo listo para re-importar.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Toast notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Password Modal for Photo Change -->
+  <div class="system-modal-backdrop" id="photoGuardBackdrop"></div>
+  <div class="system-modal" id="photoGuardModal" role="dialog" aria-modal="true" aria-labelledby="photoGuardTitle">
+    <div class="system-modal-header">
+      <div class="system-modal-icon"><i class="fas fa-lock"></i></div>
+      <div>
+        <h3 id="photoGuardTitle">Foto Protegida</h3>
+        <p>Ingresa la clave para cambiar la foto de perfil.</p>
+      </div>
+    </div>
+    <form class="system-modal-body" onsubmit="return false;">
+      <label for="photoGuardInput">Clave de acceso</label>
+      <input id="photoGuardInput" type="password" inputmode="numeric" autocomplete="off" placeholder="Ingresa la clave" />
+      <div class="system-modal-error" id="photoGuardError"></div>
+    </form>
+    <div class="system-modal-actions">
+      <button class="btn btn-outline" id="photoGuardCancelBtn">Cancelar</button>
+      <button class="btn btn-primary" id="photoGuardConfirmBtn">Confirmar</button>
+    </div>
+  </div>
+
+  <div class="system-modal-backdrop" id="githubPublishBackdrop"></div>
+  <div class="system-modal" id="githubPublishModal" role="dialog" aria-modal="true" aria-labelledby="githubPublishTitle">
+    <div class="system-modal-header">
+      <div class="system-modal-icon"><i class="fab fa-github"></i></div>
+      <div>
+        <h3 id="githubPublishTitle">Publicar Foto En GitHub</h3>
+        <p>Ingresa un token con permiso de escritura al repositorio.</p>
+      </div>
+    </div>
+    <form class="system-modal-body" onsubmit="return false;">
+      <label for="githubTokenInput">GitHub Token (Contents: Read and Write)</label>
+      <input id="githubTokenInput" type="password" autocomplete="off" placeholder="github_pat_..." />
+      <div class="system-modal-help">Se guardara como <strong>assets/profile-photo.png</strong> en la rama <strong>main</strong>.</div>
+      <div class="system-modal-error" id="githubPublishError"></div>
+    </form>
+    <div class="system-modal-actions">
+      <button class="btn btn-outline" id="githubPublishCancelBtn">Cancelar</button>
+      <button class="btn btn-primary" id="githubPublishConfirmBtn">Publicar</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ AZURE DEVOPS MODAL ═══════════════ -->
+  <div class="system-modal-backdrop" id="azureConnectBackdrop"></div>
+  <div class="system-modal" id="azureConnectModal" role="dialog" aria-modal="true" aria-labelledby="azureConnectTitle">
+    <div class="system-modal-header">
+      <div class="system-modal-icon" style="color: #0078d4;"><i class="fab fa-microsoft"></i></div>
+      <div>
+        <h3 id="azureConnectTitle">Conectar Azure DevOps</h3>
+        <p>Ingresa organizacion, proyecto y PAT para guardar el token en servidor.</p>
+      </div>
+    </div>
+    <form class="system-modal-body" onsubmit="return false;">
+      <label for="azureOrgInput">Organización de Azure DevOps</label>
+      <input id="azureOrgInput" type="text" autocomplete="off" placeholder="ej: https://dev.azure.com/mi-organizacion" />
+      
+      <label for="azureProjectInput">Nombre del Proyecto</label>
+      <input id="azureProjectInput" type="text" autocomplete="off" placeholder="ej: Mi Proyecto" />
+
+      <label for="azurePatInput">Personal Access Token (PAT)</label>
+      <input id="azurePatInput" type="password" autocomplete="off" placeholder="Pega tu PAT aquí" />
+
+      <div class="system-modal-help" id="azurePatServerStatus">
+        Estado PAT servidor: verificando...
+      </div>
+      
+      <div class="system-modal-help">
+        Si dejas el PAT vacio, se intentara usar el PAT ya guardado en servidor.
+      </div>
+      <div class="system-modal-error" id="azureConnectError"></div>
+    </form>
+    <div class="system-modal-actions">
+      <button class="btn btn-outline" id="azureConnectCancelBtn">Cancelar</button>
+      <button class="btn btn-danger" id="azureDeletePatBtn" type="button">
+        <i class="fas fa-trash-alt"></i> Borrar PAT Servidor
+      </button>
+      <button class="btn btn-primary" id="azureConnectConfirmBtn">Conectar</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ AZURE LOADING MODAL ═══════════════ -->
+  <div class="system-modal-backdrop" id="azureLoadingBackdrop" style="display: none;"></div>
+  <div class="system-modal" id="azureLoadingModal" role="dialog" aria-modal="true" style="display: none;">
+    <div class="system-modal-header">
+      <div class="system-modal-icon azure-loading-spinner"><i class="fab fa-microsoft"></i></div>
+      <div>
+        <h3>Cargando Tareas de Azure</h3>
+        <p id="azureLoadingStatus">Obteniendo información...</p>
+      </div>
+    </div>
+    <div class="system-modal-body" style="text-align: center;">
+      <div class="loading-progress-bar">
+        <div class="loading-progress-fill"></div>
+      </div>
+      <p style="margin-top: 10px; color: var(--text-2);" id="azureLoadingText">Esto puede tomar un momento...</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════ FOOTER ═══════════════ -->
+  <footer class="app-footer">
+    <div class="footer-content">
+      <div class="footer-section footer-primary">
+        <div class="footer-left">
+          <i class="fas fa-code"></i>
+        </div>
+        <div class="footer-center">
+          <span class="footer-powered">Powered by</span>
+          <span class="footer-name">Cristian Jesus Bonelo Rios</span>
+          <span class="footer-sep">|</span>
+          <span class="footer-role">SOFTWARE QUALITY ANALYST</span>
+          <span class="footer-sep">|</span>
+          <span class="footer-dept">DEVELOPMENT &amp; INNOVATION</span>
+        </div>
+        <div class="footer-right">
+          <span class="footer-version">v1.0.0</span>
+        </div>
+      </div>
+
+      <div class="footer-section footer-socials">
+        <span class="footer-section-title"><i class="fas fa-share-alt"></i> Redes Sociales</span>
+        <div class="footer-social-links">
+          <a href="https://cristiandevbonelo.github.io/porfoliocristian/" target="_blank" rel="noopener noreferrer" aria-label="Portafolio">
+            <i class="fas fa-globe"></i>
+            <span>Portafolio</span>
+          </a>
+          <a href="#" aria-label="LinkedIn pendiente">
+            <i class="fab fa-linkedin"></i>
+            <span>LinkedIn (pendiente)</span>
+          </a>
+          <a href="https://github.com/CristianBoneloRios" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+            <i class="fab fa-github"></i>
+            <span>GitHub</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="footer-section footer-photo-block">
+        <div class="footer-photo-wrap" id="footerPhotoWrap">
+          <img class="footer-photo-thumb" src="https://cristiandevbonelo.github.io/porfoliocristian/assets/1755273365367.jpg" alt="Foto de Cristian Bonelo" loading="lazy" />
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div class="photo-hover-backdrop" id="footerPhotoPreviewBackdrop" aria-hidden="true">
+    <img class="photo-hover-preview" id="footerPhotoPreviewImg" src="https://cristiandevbonelo.github.io/porfoliocristian/assets/1755273365367.jpg" alt="Vista ampliada de foto" loading="lazy" />
+  </div>
+
+  <!-- External Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+  <script src="normalizer.js"></script>
+</body>
+</html>

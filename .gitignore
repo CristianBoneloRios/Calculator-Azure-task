@@ -1,0 +1,6 @@
+api/config.php
+api/storage/pat.store.php
+
+# Variables de entorno con credenciales reales — NO subir
+# Sube solo .env.example con valores de muestra
+# .env
