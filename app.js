@@ -98,6 +98,10 @@ const COL_CANDIDATES = {
                      'story points', 'story point', 'puntos de historia'],
   remainingWork:    ['remaining work', 'trabajo restante', 'remaining', 'restante',
                      'horas restantes', 'work remaining'],
+  workDate:         ['date', 'fecha', 'work date', 'task date', 'fecha de trabajo',
+                     'completed date', 'completed on', 'changed date', 'closed date',
+                     'resolved date', 'finish date', 'end date', 'start date',
+                     'startdate', 'día', 'dia'],
   tags:             ['tags', 'etiquetas', 'tag'],
   priority:         ['priority', 'prioridad'],
   iterationPath:    ['iteration path', 'ruta de iteración', 'ruta de iteracion', 'sprint', 'iteration'],
@@ -793,12 +797,31 @@ function identifyColumns(headers) {
 // ─────────────────────────────────────────
 function parseHours(value) {
   if (value === null || value === undefined || value === '') return 0;
-  const str = String(value).trim()
+
+  const str = String(value)
+    .trim()
+    .toLowerCase()
     .replace(/,/g, '.')
-    .replace(/[hH]oras?/g, '')
+    .replace(/[—–-]/g, '')
+    .replace(/horas?|hrs?/g, 'h')
+    .replace(/minutos?|mins?/g, 'm')
+    .replace(/\s+/g, ' ')
     .trim();
+
+  if (!str) return 0;
+
+  const hoursMatch = str.match(/(\d+(?:\.\d+)?)\s*h\b/);
+  const minsMatch = str.match(/(\d+(?:\.\d+)?)\s*m\b/);
+
+  if (hoursMatch || minsMatch) {
+    const h = hoursMatch ? parseFloat(hoursMatch[1]) : 0;
+    const m = minsMatch ? parseFloat(minsMatch[1]) : 0;
+    const total = h + (m / 60);
+    return Number.isNaN(total) ? 0 : Math.max(0, total);
+  }
+
   const n = parseFloat(str);
-  return isNaN(n) ? 0 : Math.max(0, n);
+  return Number.isNaN(n) ? 0 : Math.max(0, n);
 }
 
 // ─────────────────────────────────────────
@@ -884,6 +907,9 @@ function renderFileCard(fileEntry) {
   // Progress bar
   const progressBar = buildProgressBar(summary);
 
+  // Daily hours distribution panel
+  const dailyHoursPanel = buildDailyHoursPanel(rows, headers, colMap);
+
   // Table
   const table = buildTable(rows, headers, colMap);
 
@@ -896,6 +922,7 @@ function renderFileCard(fileEntry) {
 
   bodyDiv.appendChild(hoursBar);
   bodyDiv.appendChild(progressBar);
+  bodyDiv.appendChild(dailyHoursPanel);
   if (warning) bodyDiv.insertAdjacentHTML('beforeend', warning);
   bodyDiv.appendChild(table);
 
@@ -982,6 +1009,522 @@ function buildProgressBar(summary) {
   }, 80);
 
   return div;
+}
+
+function buildDailyHoursPanel(rows, headers, colMap) {
+  const panel = document.createElement('div');
+  panel.className = 'daily-hours-panel';
+
+  const distribution = calculateDailyHoursDistribution(rows, headers, colMap);
+
+  const header = document.createElement('div');
+  header.className = 'daily-hours-header';
+
+  const titleBlock = document.createElement('div');
+  titleBlock.className = 'daily-hours-title-block';
+  titleBlock.innerHTML = `
+    <h4><i class="fas fa-calendar-day"></i> Distribucion de horas por dia</h4>
+    <p>${distribution.subtitle}</p>
+  `;
+
+  const totalBadge = document.createElement('div');
+  totalBadge.className = 'daily-hours-total-badge';
+  totalBadge.innerHTML = `<span>Total</span><strong>${fmtHoursDecimal(distribution.totalHours)}</strong>`;
+  const totalBadgeValue = totalBadge.querySelector('strong');
+
+  header.appendChild(titleBlock);
+  header.appendChild(totalBadge);
+  panel.appendChild(header);
+
+  if (!distribution.items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'daily-hours-empty';
+    empty.innerHTML = '<i class="fas fa-circle-info"></i>No se encontraron filas con fecha y horas validas para construir la distribucion diaria.';
+    panel.appendChild(empty);
+    return panel;
+  }
+
+  const firstKey = distribution.items[0].key;
+  const lastKey = distribution.items[distribution.items.length - 1].key;
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'daily-hours-toolbar';
+  toolbar.innerHTML = `
+    <div class="daily-filter-group">
+      <div class="daily-quick-ranges" data-role="quick-ranges">
+        <button type="button" class="daily-quick-btn" data-period="7d">7 dias</button>
+        <button type="button" class="daily-quick-btn" data-period="15d">15 dias</button>
+        <button type="button" class="daily-quick-btn" data-period="30d">30 dias</button>
+        <button type="button" class="daily-quick-btn" data-period="month">Mes actual</button>
+      </div>
+      <label>
+        Desde
+        <input type="date" class="daily-filter-input" data-role="from" min="${firstKey}" max="${lastKey}" value="${firstKey}">
+      </label>
+      <label>
+        Hasta
+        <input type="date" class="daily-filter-input" data-role="to" min="${firstKey}" max="${lastKey}" value="${lastKey}">
+      </label>
+      <button type="button" class="daily-filter-reset" data-role="reset">
+        <i class="fas fa-rotate-left"></i> Reset
+      </button>
+    </div>
+    <div class="daily-trend-badge daily-trend-flat" data-role="trend"></div>
+  `;
+
+  const sparklineCard = document.createElement('div');
+  sparklineCard.className = 'daily-hours-sparkline-card';
+  sparklineCard.innerHTML = `
+    <div class="daily-sparkline-head">
+      <span><i class="fas fa-wave-square"></i> Tendencia semanal</span>
+      <small data-role="spark-meta">0 semanas</small>
+    </div>
+    <div class="daily-sparkline-canvas" data-role="spark-canvas"></div>
+  `;
+
+  const list = document.createElement('div');
+  list.className = 'daily-hours-list';
+
+  const fromInput = toolbar.querySelector('[data-role="from"]');
+  const toInput = toolbar.querySelector('[data-role="to"]');
+  const resetBtn = toolbar.querySelector('[data-role="reset"]');
+  const quickButtons = [...toolbar.querySelectorAll('.daily-quick-btn')];
+  const trendBadge = toolbar.querySelector('[data-role="trend"]');
+  const sparkMeta = sparklineCard.querySelector('[data-role="spark-meta"]');
+  const sparkCanvas = sparklineCard.querySelector('[data-role="spark-canvas"]');
+
+  const setQuickActive = period => {
+    quickButtons.forEach(btn => {
+      btn.classList.toggle('active', !!period && btn.dataset.period === period);
+    });
+  };
+
+  const renderRange = () => {
+    let startKey = fromInput.value || firstKey;
+    let endKey = toInput.value || lastKey;
+
+    if (startKey > endKey) {
+      const tmp = startKey;
+      startKey = endKey;
+      endKey = tmp;
+      fromInput.value = startKey;
+      toInput.value = endKey;
+    }
+
+    const filteredItems = filterDistributionByRange(distribution.items, startKey, endKey);
+    const total = round2(filteredItems.reduce((acc, item) => acc + item.hours, 0));
+    totalBadgeValue.textContent = fmtHoursDecimal(total);
+
+    renderTrendBadge(trendBadge, filteredItems);
+    renderWeeklySparkline(sparkCanvas, sparkMeta, filteredItems);
+    renderDailyList(list, filteredItems);
+  };
+
+  fromInput.addEventListener('change', () => {
+    setQuickActive('');
+    renderRange();
+  });
+  toInput.addEventListener('change', () => {
+    setQuickActive('');
+    renderRange();
+  });
+
+  quickButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const period = btn.dataset.period;
+      const baseEnd = toInput.value || lastKey;
+
+      let startKey = firstKey;
+      let endKey = lastKey;
+
+      if (period === '7d') {
+        endKey = clampIsoDateKey(baseEnd, firstKey, lastKey);
+        startKey = clampIsoDateKey(shiftIsoDate(endKey, -6), firstKey, lastKey);
+      } else if (period === '15d') {
+        endKey = clampIsoDateKey(baseEnd, firstKey, lastKey);
+        startKey = clampIsoDateKey(shiftIsoDate(endKey, -14), firstKey, lastKey);
+      } else if (period === '30d') {
+        endKey = clampIsoDateKey(baseEnd, firstKey, lastKey);
+        startKey = clampIsoDateKey(shiftIsoDate(endKey, -29), firstKey, lastKey);
+      } else if (period === 'month') {
+        endKey = clampIsoDateKey(baseEnd, firstKey, lastKey);
+        const monthBounds = getMonthBoundsFromIso(endKey);
+        startKey = clampIsoDateKey(monthBounds.startKey, firstKey, lastKey);
+        endKey = clampIsoDateKey(monthBounds.endKey, firstKey, lastKey);
+      }
+
+      if (startKey > endKey) {
+        startKey = endKey;
+      }
+
+      fromInput.value = startKey;
+      toInput.value = endKey;
+      setQuickActive(period);
+      renderRange();
+    });
+  });
+
+  resetBtn.addEventListener('click', () => {
+    fromInput.value = firstKey;
+    toInput.value = lastKey;
+    setQuickActive('');
+    renderRange();
+  });
+
+  panel.appendChild(toolbar);
+  panel.appendChild(sparklineCard);
+  panel.appendChild(list);
+  renderRange();
+  return panel;
+}
+
+function filterDistributionByRange(items, startKey, endKey) {
+  return items.filter(item => item.key >= startKey && item.key <= endKey);
+}
+
+function renderDailyList(container, items) {
+  container.innerHTML = '';
+
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'daily-hours-empty';
+    empty.innerHTML = '<i class="fas fa-filter-circle-xmark"></i>No hay datos en el rango seleccionado.';
+    container.appendChild(empty);
+    return;
+  }
+
+  const maxHours = Math.max(...items.map(item => item.hours));
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'daily-hours-row';
+
+    const pct = maxHours > 0 ? Math.max(6, Math.round((item.hours / maxHours) * 100)) : 0;
+    row.innerHTML = `
+      <div class="daily-hours-date">${escHtml(item.label)}</div>
+      <div class="daily-hours-bar-wrap">
+        <div class="daily-hours-bar-track">
+          <div class="daily-hours-bar-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
+      <div class="daily-hours-value">${fmtHoursDecimal(item.hours)}</div>
+    `;
+
+    container.appendChild(row);
+  });
+}
+
+function renderTrendBadge(container, items) {
+  if (!container) return;
+
+  if (items.length < 2) {
+    container.className = 'daily-trend-badge daily-trend-flat';
+    container.innerHTML = '<i class="fas fa-minus"></i> Sin comparacion suficiente';
+    return;
+  }
+
+  const prev = items[items.length - 2];
+  const last = items[items.length - 1];
+  const diff = round2(last.hours - prev.hours);
+
+  if (diff > 0) {
+    const pct = prev.hours > 0 ? Math.round((diff / prev.hours) * 100) : null;
+    container.className = 'daily-trend-badge daily-trend-up';
+    container.innerHTML = `<i class="fas fa-arrow-trend-up"></i> Subio ${fmtHoursDecimal(diff)}${pct !== null ? ` (${pct}%)` : ''}`;
+    return;
+  }
+
+  if (diff < 0) {
+    const absDiff = Math.abs(diff);
+    const pct = prev.hours > 0 ? Math.round((absDiff / prev.hours) * 100) : null;
+    container.className = 'daily-trend-badge daily-trend-down';
+    container.innerHTML = `<i class="fas fa-arrow-trend-down"></i> Bajo ${fmtHoursDecimal(absDiff)}${pct !== null ? ` (${pct}%)` : ''}`;
+    return;
+  }
+
+  container.className = 'daily-trend-badge daily-trend-flat';
+  container.innerHTML = '<i class="fas fa-equals"></i> Sin cambio vs dia anterior';
+}
+
+function renderWeeklySparkline(container, metaNode, items) {
+  if (!container || !metaNode) return;
+
+  const weekly = aggregateByWeek(items);
+  metaNode.textContent = `${weekly.length} semana${weekly.length !== 1 ? 's' : ''}`;
+
+  if (!weekly.length) {
+    container.innerHTML = '<div class="daily-sparkline-empty">Sin datos para graficar.</div>';
+    return;
+  }
+
+  const svgMarkup = buildSparklineSVG(weekly.map(w => w.hours));
+  const labelsMarkup = weekly
+    .slice(-4)
+    .map(w => `<span>${escHtml(w.label)}</span>`)
+    .join('');
+
+  container.innerHTML = `
+    ${svgMarkup}
+    <div class="daily-sparkline-labels">${labelsMarkup}</div>
+  `;
+}
+
+function aggregateByWeek(items) {
+  const byWeek = new Map();
+
+  items.forEach(item => {
+    const weekStart = getWeekStartKey(item.key);
+    if (!weekStart) return;
+    byWeek.set(weekStart, round2((byWeek.get(weekStart) || 0) + item.hours));
+  });
+
+  return [...byWeek.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, hours]) => ({
+      key,
+      hours,
+      label: formatWeekLabel(key)
+    }));
+}
+
+function getWeekStartKey(isoKey) {
+  const parts = parseIsoDateParts(isoKey);
+  if (!parts) return null;
+
+  const date = new Date(parts.year, parts.month - 1, parts.day);
+  const weekday = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - weekday);
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function formatWeekLabel(isoKey) {
+  const parts = parseIsoDateParts(isoKey);
+  if (!parts) return isoKey;
+  return `Sem ${String(parts.day).padStart(2, '0')}/${String(parts.month).padStart(2, '0')}`;
+}
+
+function buildSparklineSVG(values) {
+  const width = 300;
+  const height = 76;
+  const padX = 8;
+  const padY = 10;
+  const innerW = width - (padX * 2);
+  const innerH = height - (padY * 2);
+
+  const points = values.length > 1 ? values : [values[0], values[0]];
+  const minVal = Math.min(...points);
+  const maxVal = Math.max(...points);
+  const range = Math.max(0.0001, maxVal - minVal);
+
+  const coords = points.map((value, idx) => {
+    const x = padX + (idx * innerW) / (points.length - 1);
+    const y = padY + innerH - (((value - minVal) / range) * innerH);
+    return { x, y };
+  });
+
+  const polyline = coords.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const areaPath = `M ${coords[0].x.toFixed(1)} ${height - padY} L ${polyline.replace(/,/g, ' ')} L ${coords[coords.length - 1].x.toFixed(1)} ${height - padY} Z`;
+  const dots = coords.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.8"></circle>`).join('');
+
+  return `
+    <svg class="daily-sparkline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Tendencia semanal de horas">
+      <path class="daily-sparkline-area" d="${areaPath}"></path>
+      <polyline class="daily-sparkline-line" points="${polyline}"></polyline>
+      <g class="daily-sparkline-dots">${dots}</g>
+    </svg>
+  `;
+}
+
+function parseIsoDateParts(isoKey) {
+  const m = String(isoKey || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return {
+    year: Number(m[1]),
+    month: Number(m[2]),
+    day: Number(m[3])
+  };
+}
+
+function isoKeyFromDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function shiftIsoDate(isoKey, daysDelta) {
+  const parts = parseIsoDateParts(isoKey);
+  if (!parts) return isoKey;
+
+  const date = new Date(parts.year, parts.month - 1, parts.day);
+  date.setDate(date.getDate() + daysDelta);
+  return isoKeyFromDate(date);
+}
+
+function clampIsoDateKey(key, minKey, maxKey) {
+  if (key < minKey) return minKey;
+  if (key > maxKey) return maxKey;
+  return key;
+}
+
+function getMonthBoundsFromIso(isoKey) {
+  const parts = parseIsoDateParts(isoKey);
+  if (!parts) {
+    return { startKey: isoKey, endKey: isoKey };
+  }
+
+  const firstDay = new Date(parts.year, parts.month - 1, 1);
+  const lastDay = new Date(parts.year, parts.month, 0);
+
+  return {
+    startKey: isoKeyFromDate(firstDay),
+    endKey: isoKeyFromDate(lastDay)
+  };
+}
+
+function calculateDailyHoursDistribution(rows, headers, colMap) {
+  const hoursCol = pickHoursColumn(colMap);
+  const dateCol = pickDateColumn(headers, colMap);
+
+  const subtitles = [];
+  if (hoursCol) subtitles.push(`Horas: ${hoursCol}`);
+  if (dateCol) subtitles.push(`Fecha: ${dateCol}`);
+
+  if (!hoursCol || !dateCol) {
+    return {
+      items: [],
+      totalHours: 0,
+      subtitle: subtitles.length
+        ? subtitles.join(' · ')
+        : 'No se pudo detectar automaticamente una columna de horas y fecha.'
+    };
+  }
+
+  const byDate = new Map();
+
+  rows.forEach(row => {
+    const hours = parseHours(row[hoursCol]);
+    if (hours <= 0) return;
+
+    const parsed = parseDateLike(row[dateCol]);
+    if (!parsed) return;
+
+    byDate.set(parsed.key, round2((byDate.get(parsed.key) || 0) + hours));
+  });
+
+  const items = [...byDate.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, hours]) => ({
+      key,
+      label: formatDateLabel(key),
+      hours
+    }));
+
+  const totalHours = round2(items.reduce((acc, item) => acc + item.hours, 0));
+
+  return {
+    items,
+    totalHours,
+    subtitle: subtitles.join(' · ')
+  };
+}
+
+function pickHoursColumn(colMap) {
+  return colMap.completedWork || colMap.originalEstimate || colMap.remainingWork || null;
+}
+
+function pickDateColumn(headers, colMap) {
+  if (colMap.workDate) return colMap.workDate;
+
+  const likelyDateCols = headers.filter(h => {
+    const normalized = normalizeHeaderName(h);
+    return normalized.includes('fecha')
+      || normalized.includes('date')
+      || normalized.includes('dia')
+      || normalized.includes('day');
+  });
+
+  return likelyDateCols[0] || null;
+}
+
+function normalizeHeaderName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function parseDateLike(value) {
+  if (value === null || value === undefined) return null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const excelNumeric = parseFloat(raw);
+  if (/^\d+(\.\d+)?$/.test(raw) && !Number.isNaN(excelNumeric) && excelNumeric > 59) {
+    const parsedExcelDate = parseExcelSerialDate(excelNumeric);
+    if (parsedExcelDate) return parsedExcelDate;
+  }
+
+  const dmy = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:\s+\d{1,2}(?::\d{2})?(?::\d{2})?\s*(?:[ap]\.?m\.?)?)?$/i);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    let year = Number(dmy[3]);
+    if (year < 100) year += 2000;
+    return buildDateKey(year, month, day);
+  }
+
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]);
+    const day = Number(iso[3]);
+    return buildDateKey(year, month, day);
+  }
+
+  const normalizedRaw = raw
+    .replace(/a\.\s*m\.?/i, 'AM')
+    .replace(/p\.\s*m\.?/i, 'PM');
+
+  const jsDate = new Date(normalizedRaw);
+  if (!Number.isNaN(jsDate.getTime())) {
+    return buildDateKey(jsDate.getFullYear(), jsDate.getMonth() + 1, jsDate.getDate());
+  }
+
+  return null;
+}
+
+function parseExcelSerialDate(serial) {
+  const baseDate = new Date(Date.UTC(1899, 11, 30));
+  baseDate.setUTCDate(baseDate.getUTCDate() + Math.floor(serial));
+  return buildDateKey(baseDate.getUTCFullYear(), baseDate.getUTCMonth() + 1, baseDate.getUTCDate());
+}
+
+function buildDateKey(year, month, day) {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  const date = new Date(year, month - 1, day);
+  if (
+    Number.isNaN(date.getTime())
+    || date.getFullYear() !== year
+    || date.getMonth() !== month - 1
+    || date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  const key = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  return { key };
+}
+
+function formatDateLabel(isoKey) {
+  const [year, month, day] = isoKey.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function fmtHoursDecimal(n) {
+  const val = round2(Number(n) || 0);
+  if (Number.isInteger(val)) return `${val} h`;
+  return `${val.toFixed(2).replace(/\.00$/, '').replace(/0$/, '')} h`;
 }
 
 function buildTable(rows, headers, colMap) {
