@@ -2387,9 +2387,8 @@ function renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData) {
     // Create mindmap container
     const mindmapSyntax = buildMermaidMindmap(dateLabel, totalHours, tasksForDay);
     const mermaidContainer = document.createElement('div');
-    mermaidContainer.className = 'mermaid mindmap-container';
+    mermaidContainer.className = 'mindmap-container';
     mermaidContainer.id = 'daily-mindmap-view';
-    mermaidContainer.textContent = mindmapSyntax;
     
     // Create list container
     const listContainer = document.createElement('div');
@@ -2417,10 +2416,19 @@ function renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData) {
     contentDiv.appendChild(listContainer);
     listContainer.style.display = 'none';
     
-    // Initialize/reinitialize mermaid
+    // Render mindmap with Mermaid
     if (typeof mermaid !== 'undefined') {
-      mermaid.contentLoaderMarker.push(mermaidContainer);
+      const mermaidDiv = document.createElement('div');
+      mermaidDiv.className = 'mermaid';
+      mermaidDiv.textContent = mindmapSyntax;
+      mermaidContainer.innerHTML = '';
+      mermaidContainer.appendChild(mermaidDiv);
+      
+      // Call mermaid.run() to render
       mermaid.run();
+    } else {
+      // Fallback if mermaid not loaded
+      mermaidContainer.innerHTML = `<pre>${escHtml(mindmapSyntax)}</pre>`;
     }
     
     console.log('renderDailyTasksContent completed successfully');
