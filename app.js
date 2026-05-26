@@ -2475,11 +2475,18 @@ function buildCustomMindmapView(dateLabel, totalHours, tasks) {
 
   const totalTasks = tasks.length;
 
-  // Root node
-  const rootWrap = document.createElement('div');
-  rootWrap.className = 'custom-mindmap-root';
-  rootWrap.innerHTML = `
+  const tree = document.createElement('div');
+  tree.className = 'mindmap-tree';
+  container.appendChild(tree);
+
+  const leftSide = document.createElement('div');
+  leftSide.className = 'mindmap-side mindmap-side-left';
+
+  const center = document.createElement('div');
+  center.className = 'mindmap-center';
+  center.innerHTML = `
     <div class="mindmap-root-node">
+      <div class="mindmap-root-label">DIA</div>
       <div class="mindmap-root-date">${escHtml(dateLabel)}</div>
       <div class="mindmap-root-meta">
         <span class="mindmap-root-hours">${fmtHours(totalHours)}</span>
@@ -2487,41 +2494,72 @@ function buildCustomMindmapView(dateLabel, totalHours, tasks) {
       </div>
     </div>
   `;
-  container.appendChild(rootWrap);
 
-  const branches = document.createElement('div');
-  branches.className = 'mindmap-branches';
-  container.appendChild(branches);
-  
-  // Create branches by state
+  const rightSide = document.createElement('div');
+  rightSide.className = 'mindmap-side mindmap-side-right';
+
+  tree.appendChild(leftSide);
+  tree.appendChild(center);
+  tree.appendChild(rightSide);
+
   const stateOrder = ['Por Hacer', 'En Progreso', 'Resuelto', 'Completado'];
-  stateOrder.forEach(state => {
-    if (grouped[state]) {
-      const stateTasks = grouped[state];
-      const stateHours = stateTasks.reduce((acc, t) => acc + t.hours, 0);
-      const cfg = stateConfig[state];
+  const activeStates = stateOrder.filter(state => grouped[state] && grouped[state].length);
+  const leftStates = [];
+  const rightStates = [];
 
-      const branch = document.createElement('div');
-      branch.className = `mindmap-branch ${cfg.branchClass}`;
+  activeStates.forEach((state, index) => {
+    if (index % 2 === 0) leftStates.push(state);
+    else rightStates.push(state);
+  });
 
-      const branchNode = document.createElement('div');
-      branchNode.className = 'mindmap-branch-node';
-      branchNode.innerHTML = `
-        <span class="mindmap-branch-name">${escHtml(state)}</span>
-        <span class="mindmap-branch-count">${stateTasks.length}</span>
-        <span class="mindmap-branch-hours">${fmtHours(stateHours)}</span>
+  const createBranch = (state, side) => {
+    const stateTasks = grouped[state];
+    const stateHours = stateTasks.reduce((acc, t) => acc + t.hours, 0);
+    const cfg = stateConfig[state];
+
+    const tasksByType = {};
+    stateTasks.forEach(task => {
+      const typeKey = (task.type || 'Sin tipo').trim() || 'Sin tipo';
+      if (!tasksByType[typeKey]) tasksByType[typeKey] = [];
+      tasksByType[typeKey].push(task);
+    });
+
+    const branch = document.createElement('div');
+    branch.className = `mindmap-branch ${cfg.branchClass} side-${side}`;
+
+    const branchNode = document.createElement('div');
+    branchNode.className = 'mindmap-branch-node';
+    branchNode.innerHTML = `
+      <span class="mindmap-branch-name">${escHtml(state)}</span>
+      <span class="mindmap-branch-count">${stateTasks.length}</span>
+      <span class="mindmap-branch-hours">${fmtHours(stateHours)}</span>
+    `;
+    branch.appendChild(branchNode);
+
+    const branchChildren = document.createElement('div');
+    branchChildren.className = 'mindmap-branch-children';
+
+    Object.keys(tasksByType).sort().forEach(typeName => {
+      const typeTasks = tasksByType[typeName];
+      const typeHours = typeTasks.reduce((acc, t) => acc + t.hours, 0);
+
+      const typeNode = document.createElement('div');
+      typeNode.className = 'mindmap-type-node';
+      typeNode.innerHTML = `
+        <div class="mindmap-type-header">
+          <span class="mindmap-type-name">${escHtml(typeName)}</span>
+          <span class="mindmap-type-hours">${fmtHours(typeHours)}</span>
+        </div>
       `;
-      branch.appendChild(branchNode);
 
-      const branchChildren = document.createElement('div');
-      branchChildren.className = 'mindmap-branch-children';
-      
-      stateTasks.forEach(task => {
+      const leaves = document.createElement('div');
+      leaves.className = 'mindmap-leaves';
+
+      typeTasks.forEach(task => {
         const leaf = document.createElement('div');
         leaf.className = 'mindmap-leaf-node';
 
-        const taskTitle = escHtml(task.title).substring(0, 70);
-        const taskType = task.type ? escHtml(task.type) : 'Sin tipo';
+        const taskTitle = escHtml(task.title).substring(0, 90);
         const taskHours = task.hours > 0 ? fmtHours(task.hours) : '0h';
 
         leaf.innerHTML = `
@@ -2529,19 +2567,24 @@ function buildCustomMindmapView(dateLabel, totalHours, tasks) {
             <span class="mindmap-leaf-title">${taskTitle}</span>
           </div>
           <div class="mindmap-leaf-meta">
-            <span class="mindmap-leaf-type">${taskType}</span>
             ${task.assignedTo ? `<span class="mindmap-leaf-assignee">${escHtml(task.assignedTo)}</span>` : ''}
             <span class="mindmap-leaf-hours">${taskHours}</span>
           </div>
         `;
 
-        branchChildren.appendChild(leaf);
+        leaves.appendChild(leaf);
       });
 
-      branch.appendChild(branchChildren);
-      branches.appendChild(branch);
-    }
-  });
+      typeNode.appendChild(leaves);
+      branchChildren.appendChild(typeNode);
+    });
+
+    branch.appendChild(branchChildren);
+    return branch;
+  };
+
+  leftStates.forEach(state => leftSide.appendChild(createBranch(state, 'left')));
+  rightStates.forEach(state => rightSide.appendChild(createBranch(state, 'right')));
   
   return container;
 }
