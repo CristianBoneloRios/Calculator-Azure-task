@@ -2351,35 +2351,89 @@ function renderDailyTasksContent(isoKey, dateLabel, totalHours) {
     return;
   }
 
-  const tasksList = document.createElement('div');
-  tasksList.className = 'daily-tasks-list';
+  // Build mindmap data structure
+  const mindmapSyntax = buildMermaidMindmap(dateLabel, totalHours, tasksForDay);
+  
+  const mermaidContainer = document.createElement('div');
+  mermaidContainer.className = 'mermaid mindmap-container';
+  mermaidContainer.textContent = mindmapSyntax;
+  
+  contentDiv.innerHTML = '';
+  contentDiv.appendChild(mermaidContainer);
+  
+  // Initialize/reinitialize mermaid
+  if (typeof mermaid !== 'undefined') {
+    mermaid.contentLoaderMarker.push(mermaidContainer);
+    mermaid.run();
+  }
+}
 
-  tasksForDay.forEach(task => {
-    const item = document.createElement('div');
-    item.className = 'daily-task-item';
+function buildMermaidMindmap(dateLabel, totalHours, tasks) {
+  // Group tasks by state, then by type
+  const grouped = {};
+  
+  tasks.forEach(task => {
+    const state = normalizeState(task.state);
+    const type = task.type || 'Sin tipo';
+    
+    if (!grouped[state]) {
+      grouped[state] = {};
+    }
+    if (!grouped[state][type]) {
+      grouped[state][type] = [];
+    }
+    grouped[state][type].push(task);
+  });
+  
+  let mermaidCode = `mindmap
+  root((📅 ${escapeMarkdown(dateLabel)}))
+    💼 Total: ${fmtHours(totalHours)}
+`;
 
-    const icon = getTypeIcon(task.type);
-    const hours = fmtHours(task.hours);
-    const stateBadge = task.state ? `<span class="state-badge state-${(task.state || '').toLowerCase().replace(/\s+/g, '-')}">${escHtml(task.state)}</span>` : '';
-
-    item.innerHTML = `
-      <div class="daily-task-icon">${icon}</div>
-      <div class="daily-task-main">
-        <div class="daily-task-title">${escHtml(task.title)}</div>
-        <div class="daily-task-meta">
-          ${task.assignedTo ? `<span class="daily-task-meta-item"><i class="fas fa-user"></i> ${escHtml(task.assignedTo)}</span>` : ''}
-          ${task.type ? `<span class="daily-task-meta-item"><i class="fas fa-tag"></i> ${escHtml(task.type)}</span>` : ''}
-        </div>
-      </div>
-      <div class="daily-task-state">${stateBadge}</div>
-      <div class="daily-task-hours">${hours}</div>
-    `;
-
-    tasksList.appendChild(item);
+  // State order
+  const stateOrder = ['Por Hacer', 'En Progreso', 'Resuelto', 'Completado'];
+  
+  stateOrder.forEach(state => {
+    if (grouped[state]) {
+      mermaidCode += `    ${getStateIcon(state)} ${state}\n`;
+      
+      Object.keys(grouped[state]).forEach(type => {
+        const typeTasks = grouped[state][type];
+        const typeHours = typeTasks.reduce((acc, t) => acc + t.hours, 0);
+        mermaidCode += `      ${getTypeIcon(type)} ${escapeMarkdown(type)} (${fmtHours(typeHours)})\n`;
+        
+        typeTasks.forEach(task => {
+          const safeTitle = escapeMarkdown(task.title).substring(0, 40);
+          mermaidCode += `        📌 ${safeTitle}${task.hours > 0 ? ` [${fmtHours(task.hours)}]` : ''}\n`;
+        });
+      });
+    }
   });
 
-  contentDiv.innerHTML = '';
-  contentDiv.appendChild(tasksList);
+  return mermaidCode;
+}
+
+function normalizeState(state) {
+  const s = String(state || '').toLowerCase().trim();
+  if (['done', 'closed', 'completed', 'completado', 'cerrado', 'terminado'].includes(s)) return 'Completado';
+  if (['active', 'in progress', 'en curso', 'en progreso', 'activo'].includes(s)) return 'En Progreso';
+  if (['resolved', 'resuelto'].includes(s)) return 'Resuelto';
+  return 'Por Hacer';
+}
+
+function getStateIcon(state) {
+  switch(state) {
+    case 'Completado': return '✅';
+    case 'En Progreso': return '⚡';
+    case 'Resuelto': return '✔️';
+    default: return '📋';
+  }
+}
+
+function escapeMarkdown(text) {
+  return String(text || '')
+    .replace(/[*_`#\-\[\]()]/g, ' ')
+    .trim();
 }
 
 function getDailyTasksForDate(isoKey, file) {

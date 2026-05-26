@@ -2910,6 +2910,34 @@ a { text-decoration: none; color: inherit; }
   opacity: 0.4;
 }
 
+/* Mindmap container in daily tasks modal */
+.mindmap-container {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+  max-height: calc(75vh - 160px);
+  overflow: auto;
+}
+
+.mindmap-container svg {
+  max-width: 100%;
+  height: auto;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.1));
+}
+
+/* Mermaid theme overrides for mindmap */
+.mindmap-container .mindmap-node {
+  stroke: var(--border);
+  fill: var(--bg-card);
+}
+
+.mindmap-container text {
+  fill: var(--text-1);
+  font-family: 'Inter', sans-serif;
+}
+
 /* Scrollbar styling for modal content */
 .daily-tasks-modal-content::-webkit-scrollbar {
   width: 6px;
