@@ -74,6 +74,7 @@ try {
       <div class="auth-form-panel">
         <h2>Crear cuenta</h2>
         <p class="auth-muted">Completa tus datos para continuar.</p>
+        <div id="registerStatus" class="auth-status" aria-live="polite" hidden></div>
 
         <?php if ($bootstrapError !== null): ?>
           <div class="auth-alert" role="alert">
@@ -133,7 +134,27 @@ try {
   </footer>
 
   <script>
-    document.getElementById('registerForm').addEventListener('submit', async event => {
+    const registerForm = document.getElementById('registerForm');
+    const registerSubmitBtn = registerForm.querySelector('button[type="submit"]');
+    const registerStatus = document.getElementById('registerStatus');
+
+    const setRegisterStatus = (message, type = 'loading') => {
+      registerStatus.hidden = false;
+      registerStatus.className = `auth-status ${type}`;
+      registerStatus.innerHTML = message;
+    };
+
+    const setRegisterLoadingState = isLoading => {
+      const inputs = registerForm.querySelectorAll('input, button, a');
+      inputs.forEach(element => {
+        element.toggleAttribute('disabled', isLoading);
+      });
+      registerSubmitBtn.innerHTML = isLoading
+        ? '<i class="fas fa-circle-notch fa-spin"></i> Creando cuenta...'
+        : '<i class="fas fa-user-plus"></i> Crear cuenta';
+    };
+
+    registerForm.addEventListener('submit', async event => {
       event.preventDefault();
 
       if (<?php echo $bootstrapError !== null ? 'true' : 'false'; ?>) {
@@ -144,6 +165,9 @@ try {
       const email = document.getElementById('registerEmail').value;
       const password = document.getElementById('registerPassword').value;
       const confirmPassword = document.getElementById('registerPasswordConfirm').value;
+
+      setRegisterStatus('<span class="azure-loading-spinner"><i class="fas fa-spinner"></i></span><span>Validando y creando tu cuenta...</span>', 'loading');
+      setRegisterLoadingState(true);
 
       try {
         const response = await fetch('../api/auth.php?action=register', {
@@ -167,13 +191,19 @@ try {
 
         if (!response.ok || !data || data.ok === false) {
           const serverMessage = data && data.message ? data.message : `Error HTTP ${response.status}.`;
-          alert(`${serverMessage}\n\nSi el error persiste, valida configuracion PHP y base de datos en Hostinger.`);
+          setRegisterStatus(`<i class="fas fa-circle-xmark"></i><span>${serverMessage}</span>`, 'error');
+          setRegisterLoadingState(false);
           return;
         }
 
-        window.location.href = 'index.php';
+        setRegisterStatus('<i class="fas fa-circle-check"></i><span>Registro exitoso. Te vamos a redirigir al login para iniciar sesion.</span><div class="loading-progress-bar"><div class="loading-progress-fill"></div></div>', 'success');
+
+        setTimeout(() => {
+          window.location.href = data.redirect_to || 'login.php';
+        }, 1800);
       } catch (error) {
-        alert(`No se pudo conectar al backend de autenticacion.\n\nDetalle: ${error.message}`);
+        setRegisterStatus(`<i class="fas fa-circle-xmark"></i><span>No se pudo conectar al backend de autenticacion. ${error.message}</span>`, 'error');
+        setRegisterLoadingState(false);
       }
     });
   </script>

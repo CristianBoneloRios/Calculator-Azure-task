@@ -3881,6 +3881,47 @@ a { text-decoration: none; color: inherit; }
   font-size: 13px;
 }
 
+.auth-status {
+  margin-top: 14px;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 13px;
+  display: grid;
+  gap: 8px;
+}
+
+.auth-status.loading,
+.auth-status.success,
+.auth-status.error {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  column-gap: 8px;
+}
+
+.auth-status.loading {
+  border: 1px solid rgba(59,130,246,.45);
+  background: rgba(59,130,246,.14);
+  color: #bfdbfe;
+}
+
+.auth-status.success {
+  border: 1px solid rgba(34,197,94,.45);
+  background: rgba(34,197,94,.14);
+  color: #bbf7d0;
+}
+
+.auth-status.error {
+  border: 1px solid rgba(239,68,68,.45);
+  background: rgba(239,68,68,.12);
+  color: #fecaca;
+}
+
+.auth-status .loading-progress-bar {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+}
+
 @media (max-width: 980px) {
   .auth-card {
     grid-template-columns: 1fr;

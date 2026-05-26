@@ -92,13 +92,12 @@ try {
             ], 422);
         }
 
-        $authenticatedUser = startAuthenticatedSession($user);
-
         jsonResponse([
             'ok' => true,
-            'authenticated' => true,
-            'user' => $authenticatedUser,
-            'message' => 'Cuenta creada correctamente.'
+            'authenticated' => false,
+            'user' => sanitizeUser($user),
+            'redirect_to' => 'login.php',
+            'message' => 'Cuenta creada correctamente. Ahora puedes iniciar sesion.'
         ]);
     }
 
@@ -145,7 +144,7 @@ try {
         ? applicationErrorMessage($throwable)
         : ('No se pudo iniciar auth.php: ' . $throwable->getMessage());
 
-    authJsonResponse([
+    jsonResponse([
         'ok' => false,
         'message' => $message,
     ], 500);
