@@ -2384,11 +2384,8 @@ function renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData) {
       </button>
     `;
 
-    // Create mindmap container
-    const mindmapSyntax = buildMermaidMindmap(dateLabel, totalHours, tasksForDay);
-    const mermaidContainer = document.createElement('div');
-    mermaidContainer.className = 'mindmap-container';
-    mermaidContainer.id = 'daily-mindmap-view';
+    // Create custom mindmap view
+    const mindmapView = buildCustomMindmapView(dateLabel, totalHours, tasksForDay);
     
     // Create list container
     const listContainer = document.createElement('div');
@@ -2405,37 +2402,108 @@ function renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData) {
         viewToggle.querySelectorAll('.daily-view-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         
-        mermaidContainer.style.display = isMindmap ? 'flex' : 'none';
+        mindmapView.style.display = isMindmap ? 'block' : 'none';
         listContainer.style.display = isMindmap ? 'none' : 'flex';
       });
     });
 
     contentDiv.innerHTML = '';
     contentDiv.appendChild(viewToggle);
-    contentDiv.appendChild(mermaidContainer);
+    contentDiv.appendChild(mindmapView);
     contentDiv.appendChild(listContainer);
     listContainer.style.display = 'none';
-    
-    // Render mindmap with Mermaid
-    if (typeof mermaid !== 'undefined') {
-      const mermaidDiv = document.createElement('div');
-      mermaidDiv.className = 'mermaid';
-      mermaidDiv.textContent = mindmapSyntax;
-      mermaidContainer.innerHTML = '';
-      mermaidContainer.appendChild(mermaidDiv);
-      
-      // Call mermaid.run() to render
-      mermaid.run();
-    } else {
-      // Fallback if mermaid not loaded
-      mermaidContainer.innerHTML = `<pre>${escHtml(mindmapSyntax)}</pre>`;
-    }
     
     console.log('renderDailyTasksContent completed successfully');
   } catch (error) {
     console.error('Error in renderDailyTasksContent:', error);
   }
 }
+
+function buildCustomMindmapView(dateLabel, totalHours, tasks) {
+  const container = document.createElement('div');
+  container.className = 'custom-mindmap-view';
+  
+  // Header with date
+  const header = document.createElement('div');
+  header.className = 'custom-mindmap-header';
+  header.innerHTML = `
+    <div class="mindmap-date">${escHtml(dateLabel)}</div>
+    <div class="mindmap-total">
+      <span class="mindmap-total-label">Total Horas:</span>
+      <span class="mindmap-total-value">${fmtHours(totalHours)}</span>
+    </div>
+  `;
+  container.appendChild(header);
+  
+  // Group tasks by state
+  const grouped = {};
+  tasks.forEach(task => {
+    const state = normalizeState(task.state);
+    if (!grouped[state]) {
+      grouped[state] = [];
+    }
+    grouped[state].push(task);
+  });
+  
+  // State configuration
+  const stateConfig = {
+    'Por Hacer': { icon: '📋', color: '--text-3', badge: 'state-new' },
+    'En Progreso': { icon: '⚡', color: '--accent-orange', badge: 'state-active' },
+    'Resuelto': { icon: '✔️', color: '--accent-cyan', badge: 'state-resolved' },
+    'Completado': { icon: '✅', color: '--accent-green', badge: 'state-done' }
+  };
+  
+  // Create state sections
+  const stateOrder = ['Por Hacer', 'En Progreso', 'Resuelto', 'Completado'];
+  stateOrder.forEach(state => {
+    if (grouped[state]) {
+      const stateTasks = grouped[state];
+      const stateHours = stateTasks.reduce((acc, t) => acc + t.hours, 0);
+      const cfg = stateConfig[state];
+      
+      const section = document.createElement('div');
+      section.className = 'mindmap-state-section';
+      section.style.borderTopColor = `var(${cfg.color})`;
+      
+      const sectionHeader = document.createElement('div');
+      sectionHeader.className = 'mindmap-state-header';
+      sectionHeader.innerHTML = `
+        <span class="mindmap-state-icon">${cfg.icon}</span>
+        <span class="mindmap-state-name">${escHtml(state)}</span>
+        <span class="mindmap-state-count">${stateTasks.length}</span>
+        <span class="mindmap-state-hours">${fmtHours(stateHours)}</span>
+      `;
+      section.appendChild(sectionHeader);
+      
+      const tasksList = document.createElement('div');
+      tasksList.className = 'mindmap-tasks-list';
+      
+      stateTasks.forEach(task => {
+        const taskEl = document.createElement('div');
+        taskEl.className = 'mindmap-task-item';
+        
+        const typeIcon = getTypeIcon(task.type || 'Sin tipo');
+        const taskTitle = escHtml(task.title).substring(0, 50);
+        const taskHours = task.hours > 0 ? `<span class="mindmap-task-hours">${fmtHours(task.hours)}</span>` : '';
+        
+        taskEl.innerHTML = `
+          <div class="mindmap-task-icon">${typeIcon}</div>
+          <div class="mindmap-task-content">
+            <div class="mindmap-task-title">${taskTitle}</div>
+            ${task.assignedTo ? `<div class="mindmap-task-assignee">${escHtml(task.assignedTo)}</div>` : ''}
+          </div>
+          ${taskHours}
+        `;
+        
+        tasksList.appendChild(taskEl);
+      });
+      
+      section.appendChild(tasksList);
+      container.appendChild(section);
+    }
+  });
+  
+  return container;
 
 function renderDailyTasksList(container, tasks) {
   container.innerHTML = '';
