@@ -2257,15 +2257,27 @@ function resetAzureFilters() {
 // DAILY TASKS MODAL
 // ─────────────────────────────────────────
 function showDailyTasksModal(isoKey, dateLabel, totalHours, fileData) {
-  createDailyTasksModalElements();
-  renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData);
+  console.log('showDailyTasksModal called with:', { isoKey, dateLabel, totalHours, hasFileData: !!fileData });
   
-  const backdrop = document.getElementById('daily-tasks-modal-backdrop');
-  const modal = document.getElementById('daily-tasks-modal');
-  if (backdrop && modal) {
-    backdrop.classList.add('active');
-    modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
+  try {
+    createDailyTasksModalElements();
+    renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData);
+    
+    const backdrop = document.getElementById('daily-tasks-modal-backdrop');
+    const modal = document.getElementById('daily-tasks-modal');
+    
+    console.log('Modal elements found:', { backdrop: !!backdrop, modal: !!modal });
+    
+    if (backdrop && modal) {
+      backdrop.classList.add('active');
+      modal.classList.add('active');
+      document.body.style.overflow = 'hidden';
+      console.log('Modal shown successfully');
+    } else {
+      console.error('Modal elements not found');
+    }
+  } catch (error) {
+    console.error('Error in showDailyTasksModal:', error);
   }
 }
 
@@ -2328,77 +2340,92 @@ function createDailyTasksModalElements() {
 }
 
 function renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData) {
-  const contentDiv = document.getElementById('daily-tasks-modal-content');
-  const badgeDiv = document.querySelector('.daily-tasks-modal-badge');
-  const titleDiv = document.querySelector('.daily-tasks-modal-title');
-  
-  if (!contentDiv) return;
-  if (badgeDiv) badgeDiv.textContent = fmtHours(totalHours);
-  if (titleDiv) titleDiv.textContent = `Tareas del ${escHtml(dateLabel)}`;
+  try {
+    const contentDiv = document.getElementById('daily-tasks-modal-content');
+    const badgeDiv = document.querySelector('.daily-tasks-modal-badge');
+    const titleDiv = document.querySelector('.daily-tasks-modal-title');
+    
+    console.log('renderDailyTasksContent - contentDiv found:', !!contentDiv);
+    
+    if (!contentDiv) {
+      console.error('Content div not found');
+      return;
+    }
+    
+    if (badgeDiv) badgeDiv.textContent = fmtHours(totalHours);
+    if (titleDiv) titleDiv.textContent = `Tareas del ${escHtml(dateLabel)}`;
 
-  const { rows, colMap } = fileData || {};
-  
-  if (!rows || !colMap) {
-    contentDiv.innerHTML = '<div class="daily-tasks-empty"><i class="fas fa-inbox"></i>No hay datos disponibles.</div>';
-    return;
-  }
+    const { rows, colMap } = fileData || {};
+    console.log('fileData extracted:', { hasRows: !!rows, hasColMap: !!colMap, hasWorkDate: colMap?.workDate });
+    
+    if (!rows || !colMap) {
+      console.error('Missing rows or colMap');
+      contentDiv.innerHTML = '<div class="daily-tasks-empty"><i class="fas fa-inbox"></i>No hay datos disponibles.</div>';
+      return;
+    }
 
-  const tasksForDay = getDailyTasksForDateDirect(isoKey, rows, colMap);
-  
-  if (!tasksForDay.length) {
-    contentDiv.innerHTML = '<div class="daily-tasks-empty"><i class="fas fa-inbox"></i>Sin tareas en este día.</div>';
-    return;
-  }
+    const tasksForDay = getDailyTasksForDateDirect(isoKey, rows, colMap);
+    console.log('Tasks for day:', tasksForDay.length, 'tasks found');
+    
+    if (!tasksForDay.length) {
+      contentDiv.innerHTML = '<div class="daily-tasks-empty"><i class="fas fa-inbox"></i>Sin tareas en este día.</div>';
+      return;
+    }
 
-  // Create view toggle
-  const viewToggle = document.createElement('div');
-  viewToggle.className = 'daily-tasks-view-toggle';
-  viewToggle.innerHTML = `
-    <button class="daily-view-btn daily-view-mindmap active" data-view="mindmap" title="Vista Mapa Mental">
-      <i class="fas fa-sitemap"></i> Mapa Mental
-    </button>
-    <button class="daily-view-btn daily-view-list" data-view="list" title="Vista Lista">
-      <i class="fas fa-list"></i> Lista
-    </button>
-  `;
+    // Create view toggle
+    const viewToggle = document.createElement('div');
+    viewToggle.className = 'daily-tasks-view-toggle';
+    viewToggle.innerHTML = `
+      <button class="daily-view-btn daily-view-mindmap active" data-view="mindmap" title="Vista Mapa Mental">
+        <i class="fas fa-sitemap"></i> Mapa Mental
+      </button>
+      <button class="daily-view-btn daily-view-list" data-view="list" title="Vista Lista">
+        <i class="fas fa-list"></i> Lista
+      </button>
+    `;
 
-  // Create mindmap container
-  const mindmapSyntax = buildMermaidMindmap(dateLabel, totalHours, tasksForDay);
-  const mermaidContainer = document.createElement('div');
-  mermaidContainer.className = 'mermaid mindmap-container';
-  mermaidContainer.id = 'daily-mindmap-view';
-  mermaidContainer.textContent = mindmapSyntax;
-  
-  // Create list container
-  const listContainer = document.createElement('div');
-  listContainer.className = 'daily-tasks-list';
-  listContainer.id = 'daily-list-view';
-  renderDailyTasksList(listContainer, tasksForDay);
-  
-  // Setup toggle
-  viewToggle.querySelectorAll('.daily-view-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const view = btn.dataset.view;
-      const isMindmap = view === 'mindmap';
-      
-      viewToggle.querySelectorAll('.daily-view-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      
-      mermaidContainer.style.display = isMindmap ? 'flex' : 'none';
-      listContainer.style.display = isMindmap ? 'none' : 'flex';
+    // Create mindmap container
+    const mindmapSyntax = buildMermaidMindmap(dateLabel, totalHours, tasksForDay);
+    const mermaidContainer = document.createElement('div');
+    mermaidContainer.className = 'mermaid mindmap-container';
+    mermaidContainer.id = 'daily-mindmap-view';
+    mermaidContainer.textContent = mindmapSyntax;
+    
+    // Create list container
+    const listContainer = document.createElement('div');
+    listContainer.className = 'daily-tasks-list';
+    listContainer.id = 'daily-list-view';
+    renderDailyTasksList(listContainer, tasksForDay);
+    
+    // Setup toggle
+    viewToggle.querySelectorAll('.daily-view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const view = btn.dataset.view;
+        const isMindmap = view === 'mindmap';
+        
+        viewToggle.querySelectorAll('.daily-view-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        mermaidContainer.style.display = isMindmap ? 'flex' : 'none';
+        listContainer.style.display = isMindmap ? 'none' : 'flex';
+      });
     });
-  });
 
-  contentDiv.innerHTML = '';
-  contentDiv.appendChild(viewToggle);
-  contentDiv.appendChild(mermaidContainer);
-  contentDiv.appendChild(listContainer);
-  listContainer.style.display = 'none';
-  
-  // Initialize/reinitialize mermaid
-  if (typeof mermaid !== 'undefined') {
-    mermaid.contentLoaderMarker.push(mermaidContainer);
-    mermaid.run();
+    contentDiv.innerHTML = '';
+    contentDiv.appendChild(viewToggle);
+    contentDiv.appendChild(mermaidContainer);
+    contentDiv.appendChild(listContainer);
+    listContainer.style.display = 'none';
+    
+    // Initialize/reinitialize mermaid
+    if (typeof mermaid !== 'undefined') {
+      mermaid.contentLoaderMarker.push(mermaidContainer);
+      mermaid.run();
+    }
+    
+    console.log('renderDailyTasksContent completed successfully');
+  } catch (error) {
+    console.error('Error in renderDailyTasksContent:', error);
   }
 }
 
