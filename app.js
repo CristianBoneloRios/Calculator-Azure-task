@@ -911,8 +911,34 @@ function renderFileCard(fileEntry) {
   // Daily hours distribution panel
   const dailyHoursPanel = buildDailyHoursPanel(rows, headers, colMap);
 
-  // Table
+  // Table & Kanban container
   const table = buildTable(rows, headers, colMap);
+  const kanban = buildKanban(rows, headers, colMap);
+  
+  const viewContainer = document.createElement('div');
+  viewContainer.className = 'view-container';
+  
+  const viewToggle = buildViewToggle();
+  table.style.display = 'block';
+  kanban.style.display = 'none';
+  
+  viewContainer.appendChild(viewToggle);
+  viewContainer.appendChild(table);
+  viewContainer.appendChild(kanban);
+  
+  // Attach toggle listeners
+  viewToggle.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      const isTable = view === 'table';
+      
+      viewToggle.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      table.style.display = isTable ? 'block' : 'none';
+      kanban.style.display = isTable ? 'none' : 'block';
+    });
+  });
 
   // Warning if no hour cols detected
   const warning = !summary.hasHourCols
@@ -925,7 +951,7 @@ function renderFileCard(fileEntry) {
   bodyDiv.appendChild(progressBar);
   bodyDiv.appendChild(dailyHoursPanel);
   if (warning) bodyDiv.insertAdjacentHTML('beforeend', warning);
-  bodyDiv.appendChild(table);
+  bodyDiv.appendChild(viewContainer);
 
   card.appendChild(headerDiv);
   card.appendChild(bodyDiv);
@@ -1086,6 +1112,10 @@ function buildDailyHoursPanel(rows, headers, colMap) {
   const list = document.createElement('div');
   list.className = 'daily-hours-list';
 
+  const countFooter = document.createElement('div');
+  countFooter.className = 'daily-hours-count';
+  countFooter.textContent = 'Dias registrados: 0';
+
   const fromInput = toolbar.querySelector('[data-role="from"]');
   const toInput = toolbar.querySelector('[data-role="to"]');
   const resetBtn = toolbar.querySelector('[data-role="reset"]');
@@ -1119,6 +1149,7 @@ function buildDailyHoursPanel(rows, headers, colMap) {
     renderTrendBadge(trendBadge, filteredItems);
     renderWeeklySparkline(sparkCanvas, sparkMeta, filteredItems);
     renderDailyList(list, filteredItems);
+    countFooter.textContent = `Dias registrados: ${filteredItems.length}`;
   };
 
   fromInput.addEventListener('change', () => {
@@ -1175,6 +1206,7 @@ function buildDailyHoursPanel(rows, headers, colMap) {
   panel.appendChild(toolbar);
   panel.appendChild(sparklineCard);
   panel.appendChild(list);
+  panel.appendChild(countFooter);
   renderRange();
   return panel;
 }
@@ -2399,4 +2431,138 @@ function getTypeIcon(typeStr) {
   if (type.includes('epic')) return '<i class="fas fa-flag"></i>';
   if (type.includes('story')) return '<i class="fas fa-book"></i>';
   return '<i class="fas fa-circle-dot"></i>';
+}
+
+// ─────────────────────────────────────────
+// KANBAN VIEW
+// ─────────────────────────────────────────
+function groupByState(rows, colMap) {
+  const groups = {
+    pending: [],    // To Do, New, Pendiente
+    active: [],     // In Progress, En curso, Activo
+    resolved: [],   // Resolved, Resuelto
+    done: []        // Done, Completed, Terminado
+  };
+
+  rows.forEach(row => {
+    const state = String(row[colMap.state] || '').toLowerCase().trim();
+    
+    if (['done', 'closed', 'completed', 'completado', 'cerrado', 'terminado'].includes(state)) {
+      groups.done.push(row);
+    } else if (['active', 'in progress', 'en curso', 'en progreso', 'activo'].includes(state)) {
+      groups.active.push(row);
+    } else if (['resolved', 'resuelto'].includes(state)) {
+      groups.resolved.push(row);
+    } else {
+      groups.pending.push(row);
+    }
+  });
+
+  return groups;
+}
+
+function buildKanban(rows, headers, colMap) {
+  const groups = groupByState(rows, colMap);
+  const hourCols = new Set([colMap.completedWork, colMap.originalEstimate, colMap.remainingWork].filter(Boolean));
+
+  const container = document.createElement('div');
+  container.className = 'kanban-container';
+
+  const columns = [
+    { key: 'pending', title: '📋 Por Hacer', icon: 'fa-square-check', color: '#6b7280' },
+    { key: 'active', title: '⚡ En Progreso', icon: 'fa-spinner', color: '#3b82f6' },
+    { key: 'resolved', title: '✔️ Resuelto', icon: 'fa-check', color: '#06b6d4' },
+    { key: 'done', title: '✅ Completado', icon: 'fa-circle-check', color: '#22c55e' }
+  ];
+
+  columns.forEach(col => {
+    const column = document.createElement('div');
+    column.className = 'kanban-column';
+    column.style.borderTopColor = col.color;
+
+    const colHeader = document.createElement('div');
+    colHeader.className = 'kanban-column-header';
+    colHeader.innerHTML = `
+      <div class="kanban-col-title">
+        <span>${col.title}</span>
+        <span class="kanban-col-count">${groups[col.key].length}</span>
+      </div>
+      <div class="kanban-col-meta">${fmtHours(groups[col.key].reduce((acc, r) => acc + parseHours(r[colMap.completedWork] || '0'), 0))} horas</div>
+    `;
+
+    const colBody = document.createElement('div');
+    colBody.className = 'kanban-column-body';
+
+    if (groups[col.key].length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'kanban-empty';
+      empty.innerHTML = '<i class="fas fa-inbox"></i><p>Vacío</p>';
+      colBody.appendChild(empty);
+    } else {
+      groups[col.key].forEach(row => {
+        const card = buildKanbanCard(row, headers, colMap, hourCols);
+        colBody.appendChild(card);
+      });
+    }
+
+    column.appendChild(colHeader);
+    column.appendChild(colBody);
+    container.appendChild(column);
+  });
+
+  return container;
+}
+
+function buildKanbanCard(row, headers, colMap, hourCols) {
+  const card = document.createElement('div');
+  card.className = 'kanban-card';
+
+  const title = row[colMap.title] || '(Sin título)';
+  const state = row[colMap.state] || '';
+  const assignedTo = row[colMap.assignedTo] || '';
+  const type = row[colMap.type] || '';
+  const hours = parseHours(row[colMap.completedWork] || '0');
+  const estimate = parseHours(row[colMap.originalEstimate] || '0');
+
+  const stateBadgeClass = (() => {
+    const s = String(state).toLowerCase();
+    if (['done', 'closed', 'completed', 'completado', 'cerrado', 'terminado'].includes(s)) return 'state-done';
+    if (['active', 'in progress', 'en curso', 'en progreso', 'activo'].includes(s)) return 'state-active';
+    if (['resolved', 'resuelto'].includes(s)) return 'state-resolved';
+    return 'state-new';
+  })();
+
+  const typeIcon = getTypeIcon(type);
+
+  card.innerHTML = `
+    <div class="kanban-card-head">
+      <div class="kanban-card-type">${typeIcon}</div>
+      <div class="kanban-card-state"><span class="state-badge ${stateBadgeClass}">${escHtml(state || 'N/A')}</span></div>
+    </div>
+    <div class="kanban-card-title">${escHtml(title)}</div>
+    ${type ? `<div class="kanban-card-type-label">${escHtml(type)}</div>` : ''}
+    ${assignedTo ? `<div class="kanban-card-assigned"><i class="fas fa-user-circle"></i> ${escHtml(assignedTo)}</div>` : ''}
+    <div class="kanban-card-footer">
+      ${hours > 0 ? `<span class="kanban-card-hours"><i class="fas fa-hourglass-end"></i> ${fmtHours(hours)}</span>` : ''}
+      ${estimate > 0 ? `<span class="kanban-card-estimate"><i class="fas fa-clock"></i> ${fmtHours(estimate)}</span>` : ''}
+    </div>
+  `;
+
+  return card;
+}
+
+function buildViewToggle() {
+  const container = document.createElement('div');
+  container.className = 'view-toggle-container';
+  container.innerHTML = `
+    <div class="view-toggle">
+      <button class="view-btn view-btn-table active" data-view="table" title="Vista tabla">
+        <i class="fas fa-table"></i> Tabla
+      </button>
+      <button class="view-btn view-btn-kanban" data-view="kanban" title="Vista Kanban">
+        <i class="fas fa-columns"></i> Kanban
+      </button>
+    </div>
+  `;
+  return container;
 }
