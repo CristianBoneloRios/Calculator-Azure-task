@@ -87,7 +87,8 @@ function safeSetItem(key, value) {
 // ─────────────────────────────────────────
 const COL_CANDIDATES = {
   id:               ['id', 'work item id', 'id de elemento de trabajo', 'workitemid'],
-  title:            ['title', 'título', 'titulo', 'name', 'nombre'],
+  title:            ['title', 'título', 'titulo', 'name', 'nombre', 'summary', 'descripción', 'descripcion',
+                     'task name', 'task title', 'asunto', 'subject', 'tarea'],
   type:             ['work item type', 'tipo de elemento de trabajo', 'type', 'tipo', 'item type'],
   assignedTo:       ['assigned to', 'asignado a', 'assignee', 'asignatario'],
   state:            ['state', 'estado', 'status', 'estatus'],
@@ -2352,24 +2353,21 @@ function renderDailyTasksContent(isoKey, dateLabel, totalHours) {
 function getDailyTasksForDate(isoKey, file) {
   if (!file || !file.rows || !file.colMap) return [];
 
-  const { rows, headers, colMap } = file;
+  const { rows, colMap } = file;
   const tasks = [];
   
-  // Get column name for date
-  const dateCol = pickDateColumn(headers, colMap);
-  if (!dateCol) return tasks;
+  if (!colMap.workDate) return tasks;
 
   rows.forEach(row => {
-    const dateStr = row[dateCol] || '';
+    const dateStr = row[colMap.workDate] || '';
     const parsedDate = parseDateLike(dateStr);
     
     if (parsedDate && parsedDate.key === isoKey) {
-      const title = row[headers[colMap.title]] || '(Sin título)';
-      const type = row[headers[colMap.type]] || '';
-      const assignedTo = row[headers[colMap.assignedTo]] || '';
-      const state = row[headers[colMap.state]] || '';
-      const hoursCol = pickHoursColumn(colMap);
-      const hoursStr = hoursCol ? row[hoursCol] : '0';
+      const title = row[colMap.title] || '(Sin título)';
+      const type = row[colMap.type] || '';
+      const assignedTo = row[colMap.assignedTo] || '';
+      const state = row[colMap.state] || '';
+      const hoursStr = row[colMap.completedWork] || '0';
       const hours = parseHours(hoursStr);
 
       tasks.push({ title, type, assignedTo, state, hours });
