@@ -202,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSharedAboutPhoto();
   }
   restoreAzureConnection();
+  initUploadEvents();
   initEvents();
   updateGlobalStats();
   updateFileHistory();
@@ -252,10 +253,6 @@ function initEvents() {
   // Publish profile photo globally (GitHub repo)
   DOM.publishPhotoBtn.addEventListener('click', handlePublishPhotoToGithub);
 
-  // File input
-  DOM.selectFilesBtn.addEventListener('click', () => DOM.fileInput.click());
-  DOM.fileInput.addEventListener('change', e => handleFiles(e.target.files));
-
   // Azure DevOps connection
   DOM.connectAzureBtn.addEventListener('click', openAzureConnectModal);
 
@@ -266,12 +263,6 @@ function initEvents() {
   DOM.azureResetFilterBtn.addEventListener('click', resetAzureFilters);
   DOM.azureFilterUser.addEventListener('keydown', e => { if (e.key === 'Enter') applyAzureFilters(); });
   DOM.azureFilterState.addEventListener('change', applyAzureFilters);
-
-  // Drag & drop
-  DOM.uploadZone.addEventListener('dragover',  e => { e.preventDefault(); DOM.uploadZone.classList.add('drag-over'); });
-  DOM.uploadZone.addEventListener('dragleave', e => { if (!DOM.uploadZone.contains(e.relatedTarget)) DOM.uploadZone.classList.remove('drag-over'); });
-  DOM.uploadZone.addEventListener('drop',      e => { e.preventDefault(); DOM.uploadZone.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
-  DOM.uploadZone.addEventListener('click',     e => { if (e.target === DOM.uploadZone || e.target.closest('.upload-zone-content')) {} });
 
   // Nav sidebar items
   const navItems = document.querySelectorAll('.nav-item[data-section]');
@@ -291,6 +282,47 @@ function initEvents() {
 
   // Footer photo hover preview
   initFooterPhotoHoverPreview();
+}
+
+function initUploadEvents() {
+  if (DOM.selectFilesBtn && DOM.fileInput) {
+    DOM.selectFilesBtn.addEventListener('click', () => DOM.fileInput.click());
+  }
+
+  if (DOM.fileInput) {
+    DOM.fileInput.addEventListener('change', e => handleFiles(e.target.files));
+  }
+
+  if (!DOM.uploadZone) return;
+
+  const preventDefaults = e => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    DOM.uploadZone.addEventListener(eventName, e => {
+      preventDefaults(e);
+      DOM.uploadZone.classList.add('drag-over');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    DOM.uploadZone.addEventListener(eventName, e => {
+      preventDefaults(e);
+      if (eventName === 'dragleave') {
+        if (!DOM.uploadZone.contains(e.relatedTarget)) {
+          DOM.uploadZone.classList.remove('drag-over');
+        }
+        return;
+      }
+
+      DOM.uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+        handleFiles(e.dataTransfer.files);
+      }
+    });
+  });
 }
 
 function initFooterPhotoHoverPreview() {
@@ -2504,6 +2536,7 @@ function buildCustomMindmapView(dateLabel, totalHours, tasks) {
   });
   
   return container;
+}
 
 function renderDailyTasksList(container, tasks) {
   container.innerHTML = '';
