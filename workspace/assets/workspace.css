@@ -216,6 +216,21 @@
   border: 1px solid rgba(59, 130, 246, 0.22);
 }
 
+.workspace-callout {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--text-1);
+  font-size: 13px;
+}
+
+.workspace-callout.subtle {
+  border-color: var(--border);
+  background: var(--bg-card-2);
+  color: var(--text-2);
+}
+
 /* ═══════════════════════════════════════
    WORKSPACE — Empty / Muted
 ═══════════════════════════════════════ */

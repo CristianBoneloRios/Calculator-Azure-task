@@ -81,7 +81,8 @@ async function loadSummary() {
       <article class="workspace-stat"><span class="workspace-tag">Notas</span><strong>${data.summary.notes}</strong><p class="workspace-muted">Ideas activas y referencias</p></article>
       <article class="workspace-stat"><span class="workspace-tag">Hoy</span><strong>${data.summary.tasks_today}</strong><p class="workspace-muted">Tareas programadas para hoy</p></article>
       <article class="workspace-stat"><span class="workspace-tag">Metas</span><strong>${data.summary.goals_active}</strong><p class="workspace-muted">Objetivos en curso</p></article>
-      <article class="workspace-stat"><span class="workspace-tag">Agenda</span><strong>${data.summary.events_upcoming}</strong><p class="workspace-muted">Eventos por atender</p></article>`;
+      <article class="workspace-stat"><span class="workspace-tag">Agenda</span><strong>${data.summary.events_upcoming}</strong><p class="workspace-muted">Eventos por atender</p></article>
+      <article class="workspace-stat"><span class="workspace-tag">Teams hoy</span><strong>${data.summary.teams_hours_today_label}</strong><p class="workspace-muted">${data.summary.teams_sessions_today} sesiones sincronizadas desde Power Automate</p></article>`;
 
     renderList(summaryTasks, data.tasks, item => `<div class="workspace-list-item"><strong>${item.title}</strong><p>${item.task_date} · ${item.status} · ${item.priority}</p></div>`, 'Aun no tienes tareas para hoy.');
     renderList(summaryGoals, data.goals, item => `<div class="workspace-list-item"><strong>${item.title}</strong><p>${item.progress_percent}% completado · ${item.status}</p></div>`, 'Todavia no hay metas registradas.');
@@ -361,6 +362,28 @@ async function initCalendarPage() {
   const form = document.getElementById('calendarForm');
   const list = document.getElementById('calendarList');
   const sources = document.getElementById('calendarSources');
+  const rotateKeyButton = document.getElementById('powerAutomateRotateKey');
+  const externalEmailInput = document.getElementById('powerAutomateExternalEmail');
+  const webhookUrlInput = document.getElementById('powerAutomateWebhookUrl');
+  const headerNameInput = document.getElementById('powerAutomateHeaderName');
+  const tokenInput = document.getElementById('powerAutomateToken');
+  const statusBox = document.getElementById('powerAutomateStatus');
+  const teamsTodaySummary = document.getElementById('teamsTodaySummary');
+
+  const renderPowerAutomateConfig = config => {
+    if (!config) {
+      return;
+    }
+
+    if (externalEmailInput) externalEmailInput.value = config.external_account_email || '';
+    if (webhookUrlInput) webhookUrlInput.value = config.webhook_url || '';
+    if (headerNameInput) headerNameInput.value = config.header_name || 'X-Power-Automate-Key';
+    if (statusBox) {
+      statusBox.textContent = config.configured
+        ? `Clave activa. Estado: ${config.sync_status || 'configured'}${config.last_synced_at ? ` · ultimo sync ${config.last_synced_at}` : ''}${config.token_preview ? ` · ${config.token_preview}` : ''}`
+        : 'La integracion aun no tiene clave activa.';
+    }
+  };
 
   const load = async () => {
     const data = await apiRequest('calendar_list');
@@ -370,9 +393,15 @@ async function initCalendarPage() {
           <strong>${event.title}</strong>
           <button class="btn btn-sm btn-outline-danger" data-delete-event="${event.id}"><i class="fas fa-trash"></i></button>
         </div>
-        <p>${event.start_at} → ${event.end_at}${event.location ? ` · ${event.location}` : ''}</p>
+        <p>${event.start_at} → ${event.end_at}${event.location ? ` · ${event.location}` : ''}${event.source_type ? ` · ${event.source_type}` : ''}</p>
       </div>`, 'No hay eventos programados.');
-    renderList(sources, data.sources, source => `<div class="workspace-list-item"><strong>${source.provider}</strong><p>${source.sync_status}${source.last_synced_at ? ` · ultimo sync ${source.last_synced_at}` : ''}</p></div>`, 'Teams y Calendar aun no estan conectados.');
+    renderList(sources, data.sources, source => `<div class="workspace-list-item"><strong>${source.provider}</strong><p>${source.sync_status}${source.external_account_email ? ` · ${source.external_account_email}` : ''}${source.last_synced_at ? ` · ultimo sync ${source.last_synced_at}` : ''}</p></div>`, 'Teams y Calendar aun no estan conectados.');
+    renderPowerAutomateConfig(data.power_automate);
+    if (teamsTodaySummary) {
+      teamsTodaySummary.textContent = data.teams_today && data.teams_today.sessions > 0
+        ? `Hoy se acumularon ${data.teams_today.minutes} min en ${data.teams_today.sessions} sesiones de Teams sincronizadas.`
+        : 'Sin datos sincronizados hoy.';
+    }
 
     list.querySelectorAll('[data-delete-event]').forEach(button => {
       button.addEventListener('click', async () => {
@@ -400,6 +429,28 @@ async function initCalendarPage() {
       form.reset();
       await load();
       showWorkspaceToast('Evento guardado.', 'success');
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  rotateKeyButton?.addEventListener('click', async () => {
+    try {
+      const data = await apiRequest('power_automate_config_rotate', {
+        method: 'POST',
+        body: JSON.stringify({
+          external_account_email: externalEmailInput?.value || '',
+        })
+      });
+
+      if (tokenInput) tokenInput.value = data.config.token || '';
+      if (webhookUrlInput) webhookUrlInput.value = data.config.webhook_url || '';
+      if (headerNameInput) headerNameInput.value = data.config.header_name || 'X-Power-Automate-Key';
+      if (statusBox) {
+        statusBox.textContent = 'Nueva clave generada. Copiala ahora y guardala como encabezado fijo en Power Automate.';
+      }
+      showWorkspaceToast('Clave generada. Copiala antes de salir.', 'success');
+      await load();
     } catch (error) {
       showWorkspaceToast(error.message, 'danger');
     }

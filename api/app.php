@@ -13,13 +13,38 @@ function ensureApplicationInstalled(): void
     }
 
     $pdo = db();
-    if (!tableExists($pdo, 'users')) {
+    if (shouldInstallSchema($pdo)) {
         installSchema($pdo, __DIR__ . '/schema.sql');
     }
 
     seedDefaultAdmin($pdo);
     seedPublicProfile($pdo);
     $isReady = true;
+}
+
+function shouldInstallSchema(PDO $pdo): bool
+{
+    $requiredTables = [
+        'users',
+        'user_sessions',
+        'public_profiles',
+        'profile_photo_changes',
+        'notes',
+        'daily_tasks',
+        'goals',
+        'calendar_sources',
+        'calendar_events',
+        'integrations',
+        'app_settings',
+    ];
+
+    foreach ($requiredTables as $tableName) {
+        if (!tableExists($pdo, $tableName)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function tableExists(PDO $pdo, string $tableName): bool
@@ -330,6 +355,373 @@ function buildAssetUrl(string $relativePath): string
     }
 
     return $normalizedPath;
+}
+
+function buildAppUrl(string $path = ''): string
+{
+    $baseUrl = rtrim((string) env('APP_URL', ''), '/');
+
+    if ($baseUrl === '') {
+        $https = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        $scheme = $https ? 'https' : 'http';
+        $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+        $scriptName = (string) ($_SERVER['SCRIPT_NAME'] ?? '');
+        $basePath = dirname(dirname($scriptName));
+
+        if ($basePath === '\\' || $basePath === '/') {
+            $basePath = '';
+        }
+
+        if ($host !== '') {
+            $baseUrl = $scheme . '://' . $host . rtrim(str_replace('\\', '/', $basePath), '/');
+        }
+    }
+
+    $normalizedPath = '/' . ltrim($path, '/');
+    if ($path === '') {
+        $normalizedPath = '';
+    }
+
+    if ($baseUrl !== '') {
+        return $baseUrl . $normalizedPath;
+    }
+
+    return $normalizedPath === '' ? '/' : $normalizedPath;
+}
+
+function decodeIntegrationMetadata(?string $metadata): array
+{
+    if (!is_string($metadata) || trim($metadata) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($metadata, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function encodeIntegrationMetadata(array $metadata): string
+{
+    return (string) json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+function ensureCalendarSource(int $userId, string $provider, ?string $externalAccountEmail = null): array
+{
+    $pdo = db();
+    $stmt = $pdo->prepare('SELECT * FROM calendar_sources WHERE user_id = :user_id AND provider = :provider LIMIT 1');
+    $stmt->execute([
+        'user_id' => $userId,
+        'provider' => $provider,
+    ]);
+    $source = $stmt->fetch();
+
+    if ($source) {
+        if ($externalAccountEmail !== null && $externalAccountEmail !== '' && $externalAccountEmail !== $source['external_account_email']) {
+            $update = $pdo->prepare('UPDATE calendar_sources SET external_account_email = :external_account_email, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
+            $update->execute([
+                'external_account_email' => $externalAccountEmail,
+                'id' => (int) $source['id'],
+            ]);
+            $source['external_account_email'] = $externalAccountEmail;
+        }
+
+        return $source;
+    }
+
+    $insert = $pdo->prepare('INSERT INTO calendar_sources (user_id, provider, external_account_email, sync_enabled, sync_status, last_synced_at) VALUES (:user_id, :provider, :external_account_email, 1, :sync_status, NULL)');
+    $insert->execute([
+        'user_id' => $userId,
+        'provider' => $provider,
+        'external_account_email' => $externalAccountEmail !== '' ? $externalAccountEmail : null,
+        'sync_status' => 'configured',
+    ]);
+
+    return [
+        'id' => (int) $pdo->lastInsertId(),
+        'user_id' => $userId,
+        'provider' => $provider,
+        'external_account_email' => $externalAccountEmail !== '' ? $externalAccountEmail : null,
+        'sync_enabled' => 1,
+        'sync_status' => 'configured',
+        'last_synced_at' => null,
+    ];
+}
+
+function getPowerAutomateIntegration(int $userId): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM integrations WHERE user_id = :user_id AND provider = :provider LIMIT 1');
+    $stmt->execute([
+        'user_id' => $userId,
+        'provider' => 'power_automate_calendar',
+    ]);
+
+    $integration = $stmt->fetch();
+    return $integration ?: null;
+}
+
+function createOrRotatePowerAutomateSecret(int $userId, ?string $externalAccountEmail = null): array
+{
+    $pdo = db();
+    $source = ensureCalendarSource($userId, 'power_automate', $externalAccountEmail);
+    $integration = getPowerAutomateIntegration($userId);
+
+    if (!$integration) {
+        $insert = $pdo->prepare('INSERT INTO integrations (user_id, provider, status, metadata) VALUES (:user_id, :provider, :status, :metadata)');
+        $insert->execute([
+            'user_id' => $userId,
+            'provider' => 'power_automate_calendar',
+            'status' => 'configured',
+            'metadata' => encodeIntegrationMetadata(['source_id' => (int) $source['id']]),
+        ]);
+
+        $integration = getPowerAutomateIntegration($userId);
+    }
+
+    if (!$integration) {
+        throw new RuntimeException('No se pudo inicializar la integracion de Power Automate.');
+    }
+
+    $plainSecret = bin2hex(random_bytes(24));
+    $metadata = decodeIntegrationMetadata($integration['metadata'] ?? null);
+    $metadata['source_id'] = (int) $source['id'];
+    $metadata['webhook_secret_hash'] = password_hash($plainSecret, PASSWORD_DEFAULT);
+    $metadata['rotated_at'] = date(DATE_ATOM);
+    if ($externalAccountEmail !== null && $externalAccountEmail !== '') {
+        $metadata['external_account_email'] = strtolower(trim($externalAccountEmail));
+    }
+
+    $update = $pdo->prepare('UPDATE integrations SET status = :status, metadata = :metadata, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
+    $update->execute([
+        'status' => 'configured',
+        'metadata' => encodeIntegrationMetadata($metadata),
+        'id' => (int) $integration['id'],
+    ]);
+
+    return [
+        'token' => sprintf('pa_%d.%s', (int) $integration['id'], $plainSecret),
+        'webhook_url' => buildAppUrl('/api/power_automate.php'),
+        'header_name' => 'X-Power-Automate-Key',
+        'external_account_email' => $metadata['external_account_email'] ?? $source['external_account_email'] ?? null,
+    ];
+}
+
+function getPowerAutomateSetup(int $userId): array
+{
+    $integration = getPowerAutomateIntegration($userId);
+    $source = ensureCalendarSource($userId, 'power_automate');
+    $metadata = decodeIntegrationMetadata($integration['metadata'] ?? null);
+
+    return [
+        'configured' => !empty($metadata['webhook_secret_hash']),
+        'webhook_url' => buildAppUrl('/api/power_automate.php'),
+        'header_name' => 'X-Power-Automate-Key',
+        'token_preview' => $integration ? 'pa_' . (int) $integration['id'] . '.***' : null,
+        'external_account_email' => $metadata['external_account_email'] ?? $source['external_account_email'] ?? null,
+        'last_synced_at' => $source['last_synced_at'] ?? null,
+        'sync_status' => $source['sync_status'] ?? 'pending',
+        'last_payload_at' => $metadata['last_payload_at'] ?? null,
+    ];
+}
+
+function findPowerAutomateIntegrationByToken(string $token): ?array
+{
+    if (!preg_match('/^pa_(\d+)\.([a-f0-9]{48})$/i', trim($token), $matches)) {
+        return null;
+    }
+
+    $integrationId = (int) $matches[1];
+    $secret = $matches[2];
+
+    $stmt = db()->prepare('SELECT * FROM integrations WHERE id = :id AND provider = :provider LIMIT 1');
+    $stmt->execute([
+        'id' => $integrationId,
+        'provider' => 'power_automate_calendar',
+    ]);
+    $integration = $stmt->fetch();
+
+    if (!$integration) {
+        return null;
+    }
+
+    $metadata = decodeIntegrationMetadata($integration['metadata'] ?? null);
+    $hash = (string) ($metadata['webhook_secret_hash'] ?? '');
+    if ($hash === '' || !password_verify($secret, $hash)) {
+        return null;
+    }
+
+    $integration['decoded_metadata'] = $metadata;
+    return $integration;
+}
+
+function normalizeDateTimeValue(string $value): string
+{
+    try {
+        $dateTime = new DateTimeImmutable($value);
+    } catch (Exception $exception) {
+        throw new InvalidArgumentException('Fecha invalida recibida desde Power Automate.');
+    }
+
+    return $dateTime->setTimezone(new DateTimeZone(date_default_timezone_get()))->format('Y-m-d H:i:s');
+}
+
+function detectTeamsSession(array $session): bool
+{
+    if (isset($session['is_teams_session'])) {
+        return (bool) $session['is_teams_session'];
+    }
+
+    $haystack = strtolower(trim(implode(' ', array_filter([
+        (string) ($session['location'] ?? ''),
+        (string) ($session['meeting_url'] ?? ''),
+        (string) ($session['title'] ?? ''),
+        (string) ($session['description'] ?? ''),
+        (string) ($session['online_meeting_provider'] ?? ''),
+    ]))));
+
+    return $haystack !== '' && (
+        strpos($haystack, 'teams.microsoft.com') !== false ||
+        strpos($haystack, 'microsoft teams') !== false ||
+        strpos($haystack, 'teamsforbusiness') !== false
+    );
+}
+
+function syncPowerAutomateDailySessions(array $integration, array $payload): array
+{
+    $pdo = db();
+    $metadata = $integration['decoded_metadata'] ?? decodeIntegrationMetadata($integration['metadata'] ?? null);
+    $sourceId = (int) ($metadata['source_id'] ?? 0);
+    if ($sourceId <= 0) {
+        throw new RuntimeException('La integracion no tiene una fuente de calendario asociada.');
+    }
+
+    $date = (string) ($payload['date'] ?? '');
+    $sessions = $payload['sessions'] ?? null;
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !is_array($sessions)) {
+        throw new InvalidArgumentException('El payload debe incluir date y sessions.');
+    }
+
+    $sourceEmail = strtolower(trim((string) ($payload['source_email'] ?? '')));
+    $expectedEmail = strtolower(trim((string) ($metadata['external_account_email'] ?? '')));
+    if ($expectedEmail !== '' && $sourceEmail !== '' && $expectedEmail !== $sourceEmail) {
+        throw new RuntimeException('La cuenta origen no coincide con la configurada para esta integracion.');
+    }
+
+    $replaceDay = array_key_exists('replace_day', $payload) ? (bool) $payload['replace_day'] : true;
+    $dayStart = $date . ' 00:00:00';
+    $dayEnd = $date . ' 23:59:59';
+
+    $pdo->beginTransaction();
+
+    try {
+        if ($replaceDay) {
+            $delete = $pdo->prepare('DELETE FROM calendar_events WHERE user_id = :user_id AND source_id = :source_id AND source_type IN ("power_automate", "power_automate_teams") AND start_at BETWEEN :day_start AND :day_end');
+            $delete->execute([
+                'user_id' => (int) $integration['user_id'],
+                'source_id' => $sourceId,
+                'day_start' => $dayStart,
+                'day_end' => $dayEnd,
+            ]);
+        }
+
+        $insert = $pdo->prepare('INSERT INTO calendar_events (user_id, source_id, external_event_id, title, description, start_at, end_at, location, meeting_url, source_type) VALUES (:user_id, :source_id, :external_event_id, :title, :description, :start_at, :end_at, :location, :meeting_url, :source_type)');
+
+        $storedSessions = 0;
+        $teamsSessions = 0;
+        $teamsMinutes = 0;
+
+        foreach ($sessions as $session) {
+            if (!is_array($session)) {
+                continue;
+            }
+
+            $title = trim((string) ($session['title'] ?? ''));
+            $startValue = trim((string) ($session['start_at'] ?? $session['start'] ?? ''));
+            $endValue = trim((string) ($session['end_at'] ?? $session['end'] ?? ''));
+
+            if ($title === '' || $startValue === '' || $endValue === '') {
+                continue;
+            }
+
+            $startAt = normalizeDateTimeValue($startValue);
+            $endAt = normalizeDateTimeValue($endValue);
+            if ($endAt <= $startAt) {
+                continue;
+            }
+
+            $isTeamsSession = detectTeamsSession($session);
+            $sourceType = $isTeamsSession ? 'power_automate_teams' : 'power_automate';
+
+            $insert->execute([
+                'user_id' => (int) $integration['user_id'],
+                'source_id' => $sourceId,
+                'external_event_id' => trim((string) ($session['external_event_id'] ?? $session['id'] ?? '')) ?: null,
+                'title' => $title,
+                'description' => trim((string) ($session['description'] ?? '')) ?: null,
+                'start_at' => $startAt,
+                'end_at' => $endAt,
+                'location' => trim((string) ($session['location'] ?? '')) ?: null,
+                'meeting_url' => trim((string) ($session['meeting_url'] ?? $session['join_url'] ?? '')) ?: null,
+                'source_type' => $sourceType,
+            ]);
+
+            $storedSessions++;
+
+            if ($isTeamsSession) {
+                $teamsSessions++;
+                $teamsMinutes += max(0, (int) round((strtotime($endAt) - strtotime($startAt)) / 60));
+            }
+        }
+
+        $syncTimestamp = date('Y-m-d H:i:s');
+        $updateSource = $pdo->prepare('UPDATE calendar_sources SET sync_enabled = 1, sync_status = :sync_status, last_synced_at = :last_synced_at, external_account_email = :external_account_email WHERE id = :id');
+        $updateSource->execute([
+            'sync_status' => 'connected',
+            'last_synced_at' => $syncTimestamp,
+            'external_account_email' => $sourceEmail !== '' ? $sourceEmail : ($expectedEmail !== '' ? $expectedEmail : null),
+            'id' => $sourceId,
+        ]);
+
+        $metadata['last_payload_at'] = date(DATE_ATOM);
+        $metadata['last_sync_date'] = $date;
+        $metadata['last_teams_minutes'] = $teamsMinutes;
+        if ($sourceEmail !== '') {
+            $metadata['external_account_email'] = $sourceEmail;
+        }
+
+        $updateIntegration = $pdo->prepare('UPDATE integrations SET status = :status, metadata = :metadata, updated_at = CURRENT_TIMESTAMP WHERE id = :id');
+        $updateIntegration->execute([
+            'status' => 'connected',
+            'metadata' => encodeIntegrationMetadata($metadata),
+            'id' => (int) $integration['id'],
+        ]);
+
+        $pdo->commit();
+
+        return [
+            'stored_sessions' => $storedSessions,
+            'teams_sessions' => $teamsSessions,
+            'teams_minutes' => $teamsMinutes,
+            'date' => $date,
+        ];
+    } catch (Throwable $throwable) {
+        $pdo->rollBack();
+        throw $throwable;
+    }
+}
+
+function formatMinutesAsHoursLabel(int $minutes): string
+{
+    $hours = intdiv(max(0, $minutes), 60);
+    $remainingMinutes = max(0, $minutes) % 60;
+
+    if ($hours === 0) {
+        return $remainingMinutes . ' min';
+    }
+
+    if ($remainingMinutes === 0) {
+        return $hours . ' h';
+    }
+
+    return $hours . ' h ' . $remainingMinutes . ' min';
 }
 
 function saveProfilePhoto(array $user, array $file, bool $alsoUpdatePublicProfile = false): string

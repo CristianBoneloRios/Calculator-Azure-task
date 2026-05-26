@@ -2716,7 +2716,7 @@ a { text-decoration: none; color: inherit; }
 .daily-tasks-modal-close {
   position: absolute;
   top: 14px;
-  right: 14px;
+  right: 8px;
   width: 32px;
   height: 32px;
   border: none;
@@ -2730,6 +2730,7 @@ a { text-decoration: none; color: inherit; }
   border-radius: 6px;
   transition: var(--t);
   z-index: 1;
+  
 }
 
 .daily-tasks-modal-close:hover {
@@ -2747,8 +2748,8 @@ a { text-decoration: none; color: inherit; }
 }
 
 .daily-tasks-modal-title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text-1);
   letter-spacing: -0.3px;
 }
@@ -2757,6 +2758,7 @@ a { text-decoration: none; color: inherit; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin-right: 14px;
   padding: 5px 12px;
   border-radius: 20px;
   background: linear-gradient(135deg, rgba(59,130,246,.15), rgba(6,182,212,.1));
@@ -2934,6 +2936,7 @@ a { text-decoration: none; color: inherit; }
   cursor: pointer;
   border-radius: 6px;
   transition: all var(--t);
+  margin-left: 30px;
 }
 
 .daily-view-btn:hover {

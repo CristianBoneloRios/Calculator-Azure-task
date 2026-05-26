@@ -15,11 +15,25 @@ $action = (string) ($_GET['action'] ?? $_POST['action'] ?? ($input['action'] ?? 
 switch ($action) {
     case 'summary':
         $today = date('Y-m-d');
+        $teamsMinutesToday = (int) fetchScalar($pdo, 'SELECT COALESCE(SUM(TIMESTAMPDIFF(MINUTE, start_at, end_at)), 0) FROM calendar_events WHERE user_id = :user_id AND source_type = :source_type AND start_at BETWEEN :day_start AND :day_end', [
+            'user_id' => $user['id'],
+            'source_type' => 'power_automate_teams',
+            'day_start' => $today . ' 00:00:00',
+            'day_end' => $today . ' 23:59:59',
+        ]);
         $summary = [
             'notes' => (int) fetchScalar($pdo, 'SELECT COUNT(*) FROM notes WHERE user_id = :user_id', ['user_id' => $user['id']]),
             'tasks_today' => (int) fetchScalar($pdo, 'SELECT COUNT(*) FROM daily_tasks WHERE user_id = :user_id AND task_date = :task_date', ['user_id' => $user['id'], 'task_date' => $today]),
             'goals_active' => (int) fetchScalar($pdo, "SELECT COUNT(*) FROM goals WHERE user_id = :user_id AND status = 'active'", ['user_id' => $user['id']]),
             'events_upcoming' => (int) fetchScalar($pdo, 'SELECT COUNT(*) FROM calendar_events WHERE user_id = :user_id AND start_at >= :start_at', ['user_id' => $user['id'], 'start_at' => date('Y-m-d H:i:s')]),
+            'teams_sessions_today' => (int) fetchScalar($pdo, 'SELECT COUNT(*) FROM calendar_events WHERE user_id = :user_id AND source_type = :source_type AND start_at BETWEEN :day_start AND :day_end', [
+                'user_id' => $user['id'],
+                'source_type' => 'power_automate_teams',
+                'day_start' => $today . ' 00:00:00',
+                'day_end' => $today . ' 23:59:59',
+            ]),
+            'teams_minutes_today' => $teamsMinutesToday,
+            'teams_hours_today_label' => formatMinutesAsHoursLabel($teamsMinutesToday),
         ];
 
         $tasks = fetchAll($pdo, 'SELECT * FROM daily_tasks WHERE user_id = :user_id AND task_date = :task_date ORDER BY status = "done" ASC, due_time IS NULL ASC, due_time ASC, id DESC LIMIT 6', ['user_id' => $user['id'], 'task_date' => $today]);
@@ -196,6 +210,41 @@ switch ($action) {
             'ok' => true,
             'events' => fetchAll($pdo, 'SELECT * FROM calendar_events WHERE user_id = :user_id ORDER BY start_at ASC', ['user_id' => $user['id']]),
             'sources' => fetchAll($pdo, 'SELECT provider, external_account_email, sync_enabled, sync_status, last_synced_at FROM calendar_sources WHERE user_id = :user_id ORDER BY provider ASC', ['user_id' => $user['id']]),
+            'power_automate' => getPowerAutomateSetup((int) $user['id']),
+            'teams_today' => [
+                'sessions' => (int) fetchScalar($pdo, 'SELECT COUNT(*) FROM calendar_events WHERE user_id = :user_id AND source_type = :source_type AND start_at BETWEEN :day_start AND :day_end', [
+                    'user_id' => $user['id'],
+                    'source_type' => 'power_automate_teams',
+                    'day_start' => date('Y-m-d') . ' 00:00:00',
+                    'day_end' => date('Y-m-d') . ' 23:59:59',
+                ]),
+                'minutes' => (int) fetchScalar($pdo, 'SELECT COALESCE(SUM(TIMESTAMPDIFF(MINUTE, start_at, end_at)), 0) FROM calendar_events WHERE user_id = :user_id AND source_type = :source_type AND start_at BETWEEN :day_start AND :day_end', [
+                    'user_id' => $user['id'],
+                    'source_type' => 'power_automate_teams',
+                    'day_start' => date('Y-m-d') . ' 00:00:00',
+                    'day_end' => date('Y-m-d') . ' 23:59:59',
+                ]),
+            ],
+        ]);
+        break;
+
+    case 'power_automate_config_get':
+        jsonResponse([
+            'ok' => true,
+            'config' => getPowerAutomateSetup((int) $user['id']),
+        ]);
+        break;
+
+    case 'power_automate_config_rotate':
+        $externalAccountEmail = strtolower(trim((string) ($input['external_account_email'] ?? '')));
+        if ($externalAccountEmail !== '' && !filter_var($externalAccountEmail, FILTER_VALIDATE_EMAIL)) {
+            jsonResponse(['ok' => false, 'message' => 'El correo origen de Power Automate no es valido.'], 422);
+        }
+
+        jsonResponse([
+            'ok' => true,
+            'message' => 'Clave de Power Automate generada.',
+            'config' => createOrRotatePowerAutomateSecret((int) $user['id'], $externalAccountEmail !== '' ? $externalAccountEmail : null),
         ]);
         break;
 
