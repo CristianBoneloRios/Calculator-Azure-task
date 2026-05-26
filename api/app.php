@@ -229,21 +229,30 @@ function startAuthenticatedSession(array $user): array
     $_SESSION['user_id'] = (int) $user['id'];
     $_SESSION['workspace_session_token'] = $token;
 
-    $updateUser = db()->prepare('UPDATE users SET last_login_at = :now, last_seen_at = :now WHERE id = :id');
-    $updateUser->execute([
-        'now' => $now,
-        'id' => (int) $user['id'],
-    ]);
+    try {
+        $updateUser = db()->prepare('UPDATE users SET last_login_at = :now, last_seen_at = :now WHERE id = :id');
+        $updateUser->execute([
+            'now' => $now,
+            'id' => (int) $user['id'],
+        ]);
+    } catch (Throwable $throwable) {
+        error_log('No se pudo actualizar last_login_at/last_seen_at: ' . $throwable->getMessage());
+    }
 
-    $insertSession = db()->prepare('INSERT INTO user_sessions (user_id, session_token, login_at, last_seen_at, ip_address, user_agent, is_active) VALUES (:user_id, :session_token, :login_at, :last_seen_at, :ip_address, :user_agent, 1)');
-    $insertSession->execute([
-        'user_id' => (int) $user['id'],
-        'session_token' => $token,
-        'login_at' => $now,
-        'last_seen_at' => $now,
-        'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
-        'user_agent' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
-    ]);
+    try {
+        $insertSession = db()->prepare('INSERT INTO user_sessions (user_id, session_token, login_at, last_seen_at, ip_address, user_agent, is_active) VALUES (:user_id, :session_token, :login_at, :last_seen_at, :ip_address, :user_agent, 1)');
+        $insertSession->execute([
+            'user_id' => (int) $user['id'],
+            'session_token' => $token,
+            'login_at' => $now,
+            'last_seen_at' => $now,
+            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+            'user_agent' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+        ]);
+    } catch (Throwable $throwable) {
+        // This telemetry record should not block successful authentication.
+        error_log('No se pudo registrar user_session: ' . $throwable->getMessage());
+    }
 
     return currentUser() ?? sanitizeUser($user);
 }
@@ -264,17 +273,26 @@ function currentUser(): ?array
     }
 
     $now = date('Y-m-d H:i:s');
-    db()->prepare('UPDATE users SET last_seen_at = :now WHERE id = :id')->execute([
-        'now' => $now,
-        'id' => $userId,
-    ]);
+
+    try {
+        db()->prepare('UPDATE users SET last_seen_at = :now WHERE id = :id')->execute([
+            'now' => $now,
+            'id' => $userId,
+        ]);
+    } catch (Throwable $throwable) {
+        error_log('No se pudo actualizar last_seen_at: ' . $throwable->getMessage());
+    }
 
     $token = (string) ($_SESSION['workspace_session_token'] ?? '');
     if ($token !== '') {
-        db()->prepare('UPDATE user_sessions SET last_seen_at = :now, is_active = 1 WHERE session_token = :session_token')->execute([
-            'now' => $now,
-            'session_token' => $token,
-        ]);
+        try {
+            db()->prepare('UPDATE user_sessions SET last_seen_at = :now, is_active = 1 WHERE session_token = :session_token')->execute([
+                'now' => $now,
+                'session_token' => $token,
+            ]);
+        } catch (Throwable $throwable) {
+            error_log('No se pudo actualizar user_session activa: ' . $throwable->getMessage());
+        }
     }
 
     $user['last_seen_at'] = $now;
