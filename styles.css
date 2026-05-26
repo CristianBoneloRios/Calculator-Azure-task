@@ -2948,166 +2948,255 @@ a { text-decoration: none; color: inherit; }
 }
 
 .custom-mindmap-view {
-  display: block;
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
   max-height: calc(75vh - 180px);
   overflow-y: auto;
-  background: var(--bg-surface);
-  border-radius: 8px;
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 45%),
+    radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.08), transparent 50%),
+    var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
 }
 
-.custom-mindmap-header {
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid var(--border);
+.custom-mindmap-root {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-bottom: 8px;
+  background: linear-gradient(to bottom, rgba(13, 17, 23, 0.98), rgba(13, 17, 23, 0.88) 70%, transparent);
+}
+
+.mindmap-root-node {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.95));
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.14), 0 8px 24px rgba(2, 8, 23, 0.45);
 }
 
-.mindmap-date {
-  font-size: 20px;
-  font-weight: 700;
+.mindmap-root-date {
+  font-size: 22px;
+  font-weight: 800;
   color: var(--text-1);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
-.mindmap-total {
+.mindmap-root-meta {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(59, 130, 246, 0.1);
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--accent-blue);
 }
 
-.mindmap-total-label {
+.mindmap-root-hours {
+  color: var(--accent-blue-l);
+  font-size: 17px;
+  font-weight: 800;
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  background: rgba(59, 130, 246, 0.16);
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+
+.mindmap-root-tasks {
   color: var(--text-2);
   font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.mindmap-total-value {
-  color: var(--accent-blue-l);
-  font-size: 18px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.7);
 }
 
-/* State sections */
-.mindmap-state-section {
-  margin-bottom: 16px;
-  border-radius: 8px;
-  border-left: 4px solid var(--text-3);
-  background: var(--bg-card);
-  overflow: hidden;
+.mindmap-branches {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
 }
 
-.mindmap-state-header {
+.mindmap-branch {
+  position: relative;
+  padding-left: 26px;
+}
+
+.mindmap-branch::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, rgba(100, 116, 139, 0.6), rgba(100, 116, 139, 0.18));
+}
+
+.mindmap-branch::after {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 16px;
+  width: 18px;
+  height: 2px;
+  background: rgba(100, 116, 139, 0.55);
+}
+
+.mindmap-branch-node {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--bg-card-2);
-  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.92), rgba(17, 24, 39, 0.94));
 }
 
-.mindmap-state-icon {
-  font-size: 18px;
+.mindmap-branch-icon {
+  font-size: 16px;
   flex-shrink: 0;
 }
 
-.mindmap-state-name {
+.mindmap-branch-name {
   flex: 1;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-1);
-  font-size: 14px;
+  font-size: 13px;
 }
 
-.mindmap-state-count {
-  background: rgba(59, 130, 246, 0.2);
-  color: var(--accent-blue-l);
+.mindmap-branch-count {
+  color: var(--text-1);
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   min-width: 32px;
   text-align: center;
+  background: rgba(100, 116, 139, 0.28);
 }
 
-.mindmap-state-hours {
+.mindmap-branch-hours {
   color: var(--accent-green);
-  font-weight: 700;
-  font-size: 14px;
-  min-width: 50px;
+  font-weight: 800;
+  font-size: 12px;
+  min-width: 52px;
   text-align: right;
 }
 
-/* Tasks list */
-.mindmap-tasks-list {
-  padding: 8px;
+.mindmap-branch-children {
+  position: relative;
+  margin-top: 8px;
+  margin-left: 12px;
   display: flex;
   flex-direction: column;
+  gap: 7px;
+}
+
+.mindmap-leaf-node {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: rgba(11, 15, 26, 0.9);
+  border: 1px solid var(--border);
+  transition: all var(--t);
+}
+
+.mindmap-leaf-node::before {
+  content: '';
+  position: absolute;
+  left: -17px;
+  top: 50%;
+  width: 15px;
+  height: 2px;
+  transform: translateY(-50%);
+  background: rgba(100, 116, 139, 0.45);
+}
+
+.mindmap-leaf-node::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background: rgba(100, 116, 139, 0.8);
+}
+
+.mindmap-leaf-node:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-blue);
+  transform: translateX(2px);
+}
+
+.mindmap-leaf-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-.mindmap-task-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  transition: all var(--t);
-  cursor: pointer;
-}
-
-.mindmap-task-item:hover {
-  background: var(--bg-hover);
-  border-color: var(--accent-blue);
-  transform: translateX(4px);
-}
-
-.mindmap-task-icon {
-  font-size: 16px;
+.mindmap-leaf-icon {
+  font-size: 14px;
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
-.mindmap-task-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.mindmap-task-title {
+.mindmap-leaf-title {
   color: var(--text-1);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.4;
-  word-break: break-word;
-  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.mindmap-task-assignee {
+.mindmap-leaf-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.mindmap-leaf-assignee {
   color: var(--text-3);
   font-size: 11px;
-  font-weight: 500;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.mindmap-task-hours {
+.mindmap-leaf-hours {
   color: var(--accent-orange);
-  font-weight: 700;
-  font-size: 12px;
-  flex-shrink: 0;
-  padding: 4px 8px;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 3px 8px;
   background: rgba(245, 158, 11, 0.1);
   border-radius: 4px;
   border: 1px solid rgba(245, 158, 11, 0.3);
 }
+
+.branch-todo .mindmap-branch-node { border-left: 3px solid #64748b; }
+.branch-progress .mindmap-branch-node { border-left: 3px solid var(--accent-orange); }
+.branch-resolved .mindmap-branch-node { border-left: 3px solid var(--accent-cyan); }
+.branch-done .mindmap-branch-node { border-left: 3px solid var(--accent-green); }
+
+.branch-todo .mindmap-branch-count { background: rgba(100, 116, 139, 0.28); }
+.branch-progress .mindmap-branch-count { background: rgba(245, 158, 11, 0.24); }
+.branch-resolved .mindmap-branch-count { background: rgba(6, 182, 212, 0.24); }
+.branch-done .mindmap-branch-count { background: rgba(16, 185, 129, 0.24); }
 
 /* Scrollbar for custom mindmap */
 .custom-mindmap-view::-webkit-scrollbar {
@@ -3125,6 +3214,36 @@ a { text-decoration: none; color: inherit; }
 
 .custom-mindmap-view::-webkit-scrollbar-thumb:hover {
   background: var(--border-2);
+}
+
+@media (max-width: 768px) {
+  .custom-mindmap-view {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .mindmap-root-node {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mindmap-root-date {
+    font-size: 18px;
+  }
+
+  .mindmap-leaf-node {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mindmap-leaf-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .mindmap-leaf-assignee {
+    max-width: 65%;
+  }
 }
 
 /* Scrollbar styling for modal content */

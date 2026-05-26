@@ -2454,19 +2454,7 @@ function renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData) {
 function buildCustomMindmapView(dateLabel, totalHours, tasks) {
   const container = document.createElement('div');
   container.className = 'custom-mindmap-view';
-  
-  // Header with date
-  const header = document.createElement('div');
-  header.className = 'custom-mindmap-header';
-  header.innerHTML = `
-    <div class="mindmap-date">${escHtml(dateLabel)}</div>
-    <div class="mindmap-total">
-      <span class="mindmap-total-label">Total Horas:</span>
-      <span class="mindmap-total-value">${fmtHours(totalHours)}</span>
-    </div>
-  `;
-  container.appendChild(header);
-  
+
   // Group tasks by state
   const grouped = {};
   tasks.forEach(task => {
@@ -2479,59 +2467,80 @@ function buildCustomMindmapView(dateLabel, totalHours, tasks) {
   
   // State configuration
   const stateConfig = {
-    'Por Hacer': { icon: '📋', color: '--text-3', badge: 'state-new' },
-    'En Progreso': { icon: '⚡', color: '--accent-orange', badge: 'state-active' },
-    'Resuelto': { icon: '✔️', color: '--accent-cyan', badge: 'state-resolved' },
-    'Completado': { icon: '✅', color: '--accent-green', badge: 'state-done' }
+    'Por Hacer': { icon: '📋', branchClass: 'branch-todo' },
+    'En Progreso': { icon: '⚡', branchClass: 'branch-progress' },
+    'Resuelto': { icon: '✔️', branchClass: 'branch-resolved' },
+    'Completado': { icon: '✅', branchClass: 'branch-done' }
   };
+
+  const totalTasks = tasks.length;
+
+  // Root node
+  const rootWrap = document.createElement('div');
+  rootWrap.className = 'custom-mindmap-root';
+  rootWrap.innerHTML = `
+    <div class="mindmap-root-node">
+      <div class="mindmap-root-date">${escHtml(dateLabel)}</div>
+      <div class="mindmap-root-meta">
+        <span class="mindmap-root-hours">${fmtHours(totalHours)}</span>
+        <span class="mindmap-root-tasks">${totalTasks} tareas</span>
+      </div>
+    </div>
+  `;
+  container.appendChild(rootWrap);
+
+  const branches = document.createElement('div');
+  branches.className = 'mindmap-branches';
+  container.appendChild(branches);
   
-  // Create state sections
+  // Create branches by state
   const stateOrder = ['Por Hacer', 'En Progreso', 'Resuelto', 'Completado'];
   stateOrder.forEach(state => {
     if (grouped[state]) {
       const stateTasks = grouped[state];
       const stateHours = stateTasks.reduce((acc, t) => acc + t.hours, 0);
       const cfg = stateConfig[state];
-      
-      const section = document.createElement('div');
-      section.className = 'mindmap-state-section';
-      section.style.borderTopColor = `var(${cfg.color})`;
-      
-      const sectionHeader = document.createElement('div');
-      sectionHeader.className = 'mindmap-state-header';
-      sectionHeader.innerHTML = `
-        <span class="mindmap-state-icon">${cfg.icon}</span>
-        <span class="mindmap-state-name">${escHtml(state)}</span>
-        <span class="mindmap-state-count">${stateTasks.length}</span>
-        <span class="mindmap-state-hours">${fmtHours(stateHours)}</span>
+
+      const branch = document.createElement('div');
+      branch.className = `mindmap-branch ${cfg.branchClass}`;
+
+      const branchNode = document.createElement('div');
+      branchNode.className = 'mindmap-branch-node';
+      branchNode.innerHTML = `
+        <span class="mindmap-branch-icon">${cfg.icon}</span>
+        <span class="mindmap-branch-name">${escHtml(state)}</span>
+        <span class="mindmap-branch-count">${stateTasks.length}</span>
+        <span class="mindmap-branch-hours">${fmtHours(stateHours)}</span>
       `;
-      section.appendChild(sectionHeader);
-      
-      const tasksList = document.createElement('div');
-      tasksList.className = 'mindmap-tasks-list';
+      branch.appendChild(branchNode);
+
+      const branchChildren = document.createElement('div');
+      branchChildren.className = 'mindmap-branch-children';
       
       stateTasks.forEach(task => {
-        const taskEl = document.createElement('div');
-        taskEl.className = 'mindmap-task-item';
-        
+        const leaf = document.createElement('div');
+        leaf.className = 'mindmap-leaf-node';
+
         const typeIcon = getTypeIcon(task.type || 'Sin tipo');
-        const taskTitle = escHtml(task.title).substring(0, 50);
-        const taskHours = task.hours > 0 ? `<span class="mindmap-task-hours">${fmtHours(task.hours)}</span>` : '';
-        
-        taskEl.innerHTML = `
-          <div class="mindmap-task-icon">${typeIcon}</div>
-          <div class="mindmap-task-content">
-            <div class="mindmap-task-title">${taskTitle}</div>
-            ${task.assignedTo ? `<div class="mindmap-task-assignee">${escHtml(task.assignedTo)}</div>` : ''}
+        const taskTitle = escHtml(task.title).substring(0, 70);
+        const taskHours = task.hours > 0 ? fmtHours(task.hours) : '0h';
+
+        leaf.innerHTML = `
+          <div class="mindmap-leaf-main">
+            <span class="mindmap-leaf-icon">${typeIcon}</span>
+            <span class="mindmap-leaf-title">${taskTitle}</span>
           </div>
-          ${taskHours}
+          <div class="mindmap-leaf-meta">
+            ${task.assignedTo ? `<span class="mindmap-leaf-assignee">${escHtml(task.assignedTo)}</span>` : ''}
+            <span class="mindmap-leaf-hours">${taskHours}</span>
+          </div>
         `;
-        
-        tasksList.appendChild(taskEl);
+
+        branchChildren.appendChild(leaf);
       });
-      
-      section.appendChild(tasksList);
-      container.appendChild(section);
+
+      branch.appendChild(branchChildren);
+      branches.appendChild(branch);
     }
   });
   
