@@ -2467,10 +2467,10 @@ function buildCustomMindmapView(dateLabel, totalHours, tasks) {
   
   // State configuration
   const stateConfig = {
-    'Por Hacer': { icon: '📋', branchClass: 'branch-todo' },
-    'En Progreso': { icon: '⚡', branchClass: 'branch-progress' },
-    'Resuelto': { icon: '✔️', branchClass: 'branch-resolved' },
-    'Completado': { icon: '✅', branchClass: 'branch-done' }
+    'Por Hacer': { branchClass: 'branch-todo' },
+    'En Progreso': { branchClass: 'branch-progress' },
+    'Resuelto': { branchClass: 'branch-resolved' },
+    'Completado': { branchClass: 'branch-done' }
   };
 
   const totalTasks = tasks.length;
@@ -2507,7 +2507,6 @@ function buildCustomMindmapView(dateLabel, totalHours, tasks) {
       const branchNode = document.createElement('div');
       branchNode.className = 'mindmap-branch-node';
       branchNode.innerHTML = `
-        <span class="mindmap-branch-icon">${cfg.icon}</span>
         <span class="mindmap-branch-name">${escHtml(state)}</span>
         <span class="mindmap-branch-count">${stateTasks.length}</span>
         <span class="mindmap-branch-hours">${fmtHours(stateHours)}</span>
@@ -2521,16 +2520,16 @@ function buildCustomMindmapView(dateLabel, totalHours, tasks) {
         const leaf = document.createElement('div');
         leaf.className = 'mindmap-leaf-node';
 
-        const typeIcon = getTypeIcon(task.type || 'Sin tipo');
         const taskTitle = escHtml(task.title).substring(0, 70);
+        const taskType = task.type ? escHtml(task.type) : 'Sin tipo';
         const taskHours = task.hours > 0 ? fmtHours(task.hours) : '0h';
 
         leaf.innerHTML = `
           <div class="mindmap-leaf-main">
-            <span class="mindmap-leaf-icon">${typeIcon}</span>
             <span class="mindmap-leaf-title">${taskTitle}</span>
           </div>
           <div class="mindmap-leaf-meta">
+            <span class="mindmap-leaf-type">${taskType}</span>
             ${task.assignedTo ? `<span class="mindmap-leaf-assignee">${escHtml(task.assignedTo)}</span>` : ''}
             <span class="mindmap-leaf-hours">${taskHours}</span>
           </div>
