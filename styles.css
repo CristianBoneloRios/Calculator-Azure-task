@@ -2656,6 +2656,293 @@ a { text-decoration: none; color: inherit; }
   align-items: center;
   gap: 5px;
 }
+
+/* ─────────────────────────────────────────
+   DAILY TASKS MODAL
+   ───────────────────────────────────────── */
+.daily-tasks-modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0);
+  backdrop-filter: blur(0px);
+  z-index: 405;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, backdrop-filter 0.2s ease;
+}
+
+.daily-tasks-modal-backdrop.active {
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  opacity: 1;
+  pointer-events: all;
+}
+
+.daily-tasks-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  z-index: 410;
+  width: 90%;
+  max-width: 540px;
+  max-height: 75vh;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.daily-tasks-modal.active {
+  opacity: 1;
+  pointer-events: all;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.daily-tasks-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: var(--t);
+  z-index: 1;
+}
+
+.daily-tasks-modal-close:hover {
+  background: rgba(96, 165, 250, 0.1);
+  color: var(--text-1);
+}
+
+.daily-tasks-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px 12px;
+  gap: 12px;
+}
+
+.daily-tasks-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.3px;
+}
+
+.daily-tasks-modal-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(59,130,246,.15), rgba(6,182,212,.1));
+  border: 1px solid rgba(59,130,246,.25);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-blue-l);
+  min-width: 45px;
+}
+
+.daily-tasks-modal-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-2), var(--border-2), transparent);
+  margin: 0 24px;
+}
+
+.daily-tasks-modal-content {
+  padding: 16px 0;
+  max-height: calc(75vh - 140px);
+  overflow-y: auto;
+}
+
+.daily-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.daily-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s ease;
+}
+
+.daily-task-item:last-child {
+  border-bottom: none;
+}
+
+.daily-task-item:hover {
+  background: rgba(96, 165, 250, 0.04);
+}
+
+.daily-task-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-blue-l);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.daily-task-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.daily-task-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 4px;
+  word-break: break-word;
+  line-height: 1.3;
+}
+
+.daily-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.daily-task-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.daily-task-meta-item i {
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.daily-task-state {
+  flex-shrink: 0;
+}
+
+.daily-task-state .state-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.daily-task-state .state-done,
+.daily-task-state .state-completed,
+.daily-task-state .state-closed {
+  background: rgba(34,197,94,.15);
+  color: #22c55e;
+}
+
+.daily-task-state .state-in-progress {
+  background: rgba(59,130,246,.15);
+  color: var(--accent-blue-l);
+}
+
+.daily-task-state .state-to-do,
+.daily-task-state .state-new {
+  background: rgba(156,163,175,.15);
+  color: #9ca3af;
+}
+
+.daily-task-hours {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+  padding: 4px 10px;
+  background: rgba(96, 165, 250, 0.08);
+  border-radius: 6px;
+  min-width: 45px;
+  text-align: center;
+  margin-top: 2px;
+}
+
+.daily-tasks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 24px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.daily-tasks-empty i {
+  font-size: 32px;
+  opacity: 0.4;
+}
+
+/* Scrollbar styling for modal content */
+.daily-tasks-modal-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.daily-tasks-modal-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.daily-tasks-modal-content::-webkit-scrollbar-thumb {
+  background: rgba(96, 165, 250, 0.3);
+  border-radius: 3px;
+}
+
+.daily-tasks-modal-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(96, 165, 250, 0.5);
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .daily-tasks-modal {
+    width: 95%;
+    max-height: 90vh;
+  }
+  
+  .daily-tasks-modal-content {
+    max-height: calc(90vh - 140px);
+  }
+  
+  .daily-task-item {
+    flex-wrap: wrap;
+    padding: 10px 16px;
+  }
+  
+  .daily-task-main {
+    width: 100%;
+  }
+  
+  .daily-task-state,
+  .daily-task-hours {
+    width: 100%;
+    text-align: left;
+  }
+}
 .azure-filter-group input,
 .azure-filter-group select {
   background: var(--surface-3);

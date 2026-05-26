@@ -1197,6 +1197,10 @@ function renderDailyList(container, items) {
   items.forEach(item => {
     const row = document.createElement('div');
     row.className = 'daily-hours-row';
+    row.style.cursor = 'pointer';
+    row.dataset.dateKey = item.key;
+    row.dataset.dateLabel = item.label;
+    row.dataset.totalHours = item.hours;
 
     const pct = maxHours > 0 ? Math.max(6, Math.round((item.hours / maxHours) * 100)) : 0;
     row.innerHTML = `
@@ -1208,6 +1212,10 @@ function renderDailyList(container, items) {
       </div>
       <div class="daily-hours-value">${fmtHoursDecimal(item.hours)}</div>
     `;
+
+    row.addEventListener('click', () => {
+      showDailyTasksModal(item.key, item.label, item.hours);
+    });
 
     container.appendChild(row);
   });
@@ -2210,4 +2218,182 @@ function resetAzureFilters() {
   if (DOM.azureResultsCount) {
     DOM.azureResultsCount.textContent = `${AzureState.rows.length} tarea${AzureState.rows.length !== 1 ? 's' : ''}`;
   }
+}
+
+// ─────────────────────────────────────────
+// DAILY TASKS MODAL
+// ─────────────────────────────────────────
+function showDailyTasksModal(isoKey, dateLabel, totalHours) {
+  createDailyTasksModalElements();
+  renderDailyTasksContent(isoKey, dateLabel, totalHours);
+  
+  const backdrop = document.getElementById('daily-tasks-modal-backdrop');
+  const modal = document.getElementById('daily-tasks-modal');
+  if (backdrop && modal) {
+    backdrop.classList.add('active');
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+}
+
+function closeDailyTasksModal() {
+  const backdrop = document.getElementById('daily-tasks-modal-backdrop');
+  const modal = document.getElementById('daily-tasks-modal');
+  if (backdrop && modal) {
+    backdrop.classList.remove('active');
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+}
+
+function createDailyTasksModalElements() {
+  if (document.getElementById('daily-tasks-modal')) return; // Already exists
+
+  // Backdrop
+  const backdrop = document.createElement('div');
+  backdrop.id = 'daily-tasks-modal-backdrop';
+  backdrop.className = 'daily-tasks-modal-backdrop';
+  backdrop.addEventListener('click', closeDailyTasksModal);
+
+  // Modal container
+  const modal = document.createElement('div');
+  modal.id = 'daily-tasks-modal';
+  modal.className = 'daily-tasks-modal';
+
+  // Close button
+  const closeBtn = document.createElement('button');
+  closeBtn.id = 'daily-tasks-modal-close';
+  closeBtn.className = 'daily-tasks-modal-close';
+  closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+  closeBtn.addEventListener('click', closeDailyTasksModal);
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'daily-tasks-modal-header';
+  header.innerHTML = `
+    <div class="daily-tasks-modal-title">Tareas del día</div>
+    <div class="daily-tasks-modal-badge">0h</div>
+  `;
+
+  // Divider
+  const divider = document.createElement('div');
+  divider.className = 'daily-tasks-modal-divider';
+
+  // Content area
+  const content = document.createElement('div');
+  content.id = 'daily-tasks-modal-content';
+  content.className = 'daily-tasks-modal-content';
+
+  // Build modal structure
+  modal.appendChild(closeBtn);
+  modal.appendChild(header);
+  modal.appendChild(divider);
+  modal.appendChild(content);
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(modal);
+}
+
+function renderDailyTasksContent(isoKey, dateLabel, totalHours) {
+  const contentDiv = document.getElementById('daily-tasks-modal-content');
+  const badgeDiv = document.querySelector('.daily-tasks-modal-badge');
+  const titleDiv = document.querySelector('.daily-tasks-modal-title');
+  
+  if (!contentDiv) return;
+  if (badgeDiv) badgeDiv.textContent = fmtHours(totalHours);
+  if (titleDiv) titleDiv.textContent = `Tareas del ${escHtml(dateLabel)}`;
+
+  const fileId = getDailyTasksFileIdFromContext();
+  const file = AppState.files.find(f => f.id === fileId);
+  
+  if (!file) {
+    contentDiv.innerHTML = '<div class="daily-tasks-empty"><i class="fas fa-inbox"></i>No hay archivo activo.</div>';
+    return;
+  }
+
+  const tasksForDay = getDailyTasksForDate(isoKey, file);
+  
+  if (!tasksForDay.length) {
+    contentDiv.innerHTML = '<div class="daily-tasks-empty"><i class="fas fa-inbox"></i>Sin tareas en este día.</div>';
+    return;
+  }
+
+  const tasksList = document.createElement('div');
+  tasksList.className = 'daily-tasks-list';
+
+  tasksForDay.forEach(task => {
+    const item = document.createElement('div');
+    item.className = 'daily-task-item';
+
+    const icon = getTypeIcon(task.type);
+    const hours = fmtHours(task.hours);
+    const stateBadge = task.state ? `<span class="state-badge state-${(task.state || '').toLowerCase().replace(/\s+/g, '-')}">${escHtml(task.state)}</span>` : '';
+
+    item.innerHTML = `
+      <div class="daily-task-icon">${icon}</div>
+      <div class="daily-task-main">
+        <div class="daily-task-title">${escHtml(task.title)}</div>
+        <div class="daily-task-meta">
+          ${task.assignedTo ? `<span class="daily-task-meta-item"><i class="fas fa-user"></i> ${escHtml(task.assignedTo)}</span>` : ''}
+          ${task.type ? `<span class="daily-task-meta-item"><i class="fas fa-tag"></i> ${escHtml(task.type)}</span>` : ''}
+        </div>
+      </div>
+      <div class="daily-task-state">${stateBadge}</div>
+      <div class="daily-task-hours">${hours}</div>
+    `;
+
+    tasksList.appendChild(item);
+  });
+
+  contentDiv.innerHTML = '';
+  contentDiv.appendChild(tasksList);
+}
+
+function getDailyTasksForDate(isoKey, file) {
+  if (!file || !file.rows || !file.colMap) return [];
+
+  const { rows, headers, colMap } = file;
+  const tasks = [];
+
+  rows.forEach(row => {
+    const dateStr = row[headers[colMap.workDate]] || '';
+    const dateKey = parseDateLike(dateStr);
+    
+    if (dateKey === isoKey) {
+      const title = row[headers[colMap.title]] || '(Sin título)';
+      const type = row[headers[colMap.type]] || '';
+      const assignedTo = row[headers[colMap.assignedTo]] || '';
+      const state = row[headers[colMap.state]] || '';
+      const hoursStr = row[headers[colMap.completedWork]] || '0';
+      const hours = parseHours(hoursStr);
+
+      tasks.push({ title, type, assignedTo, state, hours });
+    }
+  });
+
+  return tasks;
+}
+
+function getDailyTasksFileIdFromContext() {
+  // Return the file ID of the currently active file
+  // Check if there's a file being viewed in the details section
+  if (AppState.files && AppState.files.length > 0) {
+    // Look for a file with currentDetail flag or use the first one
+    const fileWithDetail = AppState.files.find(f => f.currentDetail);
+    if (fileWithDetail) return fileWithDetail.id;
+    return AppState.files[0].id;
+  }
+  return null;
+}
+
+function getTypeIcon(typeStr) {
+  if (!typeStr) return '<i class="fas fa-circle-dot"></i>';
+  
+  const type = String(typeStr).toLowerCase();
+  if (type.includes('bug')) return '<i class="fas fa-bug"></i>';
+  if (type.includes('feature')) return '<i class="fas fa-star"></i>';
+  if (type.includes('task')) return '<i class="fas fa-check-circle"></i>';
+  if (type.includes('epic')) return '<i class="fas fa-flag"></i>';
+  if (type.includes('story')) return '<i class="fas fa-book"></i>';
+  return '<i class="fas fa-circle-dot"></i>';
 }
