@@ -2783,6 +2783,8 @@ a { text-decoration: none; color: inherit; }
   display: flex;
   flex-direction: column;
   gap: 0;
+  max-height: calc(75vh - 180px);
+  overflow-y: auto;
 }
 
 .daily-task-item {
@@ -2911,13 +2913,47 @@ a { text-decoration: none; color: inherit; }
 }
 
 /* Mindmap container in daily tasks modal */
+.daily-tasks-view-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 0 0 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.daily-view-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all var(--t);
+}
+
+.daily-view-btn:hover {
+  background: rgba(96, 165, 250, 0.1);
+  color: var(--text-1);
+}
+
+.daily-view-btn.active {
+  background: rgba(96, 165, 250, 0.15);
+  color: var(--accent-blue-l);
+  border-color: var(--accent-blue);
+}
+
 .mindmap-container {
   padding: 16px;
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 300px;
-  max-height: calc(75vh - 160px);
+  max-height: calc(75vh - 180px);
   overflow: auto;
 }
 

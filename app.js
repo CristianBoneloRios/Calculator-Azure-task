@@ -1148,7 +1148,7 @@ function buildDailyHoursPanel(rows, headers, colMap) {
 
     renderTrendBadge(trendBadge, filteredItems);
     renderWeeklySparkline(sparkCanvas, sparkMeta, filteredItems);
-    renderDailyList(list, filteredItems);
+    renderDailyList(list, filteredItems, { rows, headers, colMap });
     countFooter.textContent = `Dias registrados: ${filteredItems.length}`;
   };
 
@@ -1215,7 +1215,7 @@ function filterDistributionByRange(items, startKey, endKey) {
   return items.filter(item => item.key >= startKey && item.key <= endKey);
 }
 
-function renderDailyList(container, items) {
+function renderDailyList(container, items, fileData) {
   container.innerHTML = '';
 
   if (!items.length) {
@@ -1247,7 +1247,7 @@ function renderDailyList(container, items) {
     `;
 
     row.addEventListener('click', () => {
-      showDailyTasksModal(item.key, item.label, item.hours);
+      showDailyTasksModal(item.key, item.label, item.hours, fileData);
     });
 
     container.appendChild(row);
@@ -2256,9 +2256,9 @@ function resetAzureFilters() {
 // ─────────────────────────────────────────
 // DAILY TASKS MODAL
 // ─────────────────────────────────────────
-function showDailyTasksModal(isoKey, dateLabel, totalHours) {
+function showDailyTasksModal(isoKey, dateLabel, totalHours, fileData) {
   createDailyTasksModalElements();
-  renderDailyTasksContent(isoKey, dateLabel, totalHours);
+  renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData);
   
   const backdrop = document.getElementById('daily-tasks-modal-backdrop');
   const modal = document.getElementById('daily-tasks-modal');
@@ -2327,7 +2327,7 @@ function createDailyTasksModalElements() {
   document.body.appendChild(modal);
 }
 
-function renderDailyTasksContent(isoKey, dateLabel, totalHours) {
+function renderDailyTasksContent(isoKey, dateLabel, totalHours, fileData) {
   const contentDiv = document.getElementById('daily-tasks-modal-content');
   const badgeDiv = document.querySelector('.daily-tasks-modal-badge');
   const titleDiv = document.querySelector('.daily-tasks-modal-title');
@@ -2336,36 +2336,123 @@ function renderDailyTasksContent(isoKey, dateLabel, totalHours) {
   if (badgeDiv) badgeDiv.textContent = fmtHours(totalHours);
   if (titleDiv) titleDiv.textContent = `Tareas del ${escHtml(dateLabel)}`;
 
-  const fileId = getDailyTasksFileIdFromContext();
-  const file = AppState.files.find(f => f.id === fileId);
+  const { rows, colMap } = fileData || {};
   
-  if (!file) {
-    contentDiv.innerHTML = '<div class="daily-tasks-empty"><i class="fas fa-inbox"></i>No hay archivo activo.</div>';
+  if (!rows || !colMap) {
+    contentDiv.innerHTML = '<div class="daily-tasks-empty"><i class="fas fa-inbox"></i>No hay datos disponibles.</div>';
     return;
   }
 
-  const tasksForDay = getDailyTasksForDate(isoKey, file);
+  const tasksForDay = getDailyTasksForDateDirect(isoKey, rows, colMap);
   
   if (!tasksForDay.length) {
     contentDiv.innerHTML = '<div class="daily-tasks-empty"><i class="fas fa-inbox"></i>Sin tareas en este día.</div>';
     return;
   }
 
-  // Build mindmap data structure
+  // Create view toggle
+  const viewToggle = document.createElement('div');
+  viewToggle.className = 'daily-tasks-view-toggle';
+  viewToggle.innerHTML = `
+    <button class="daily-view-btn daily-view-mindmap active" data-view="mindmap" title="Vista Mapa Mental">
+      <i class="fas fa-sitemap"></i> Mapa Mental
+    </button>
+    <button class="daily-view-btn daily-view-list" data-view="list" title="Vista Lista">
+      <i class="fas fa-list"></i> Lista
+    </button>
+  `;
+
+  // Create mindmap container
   const mindmapSyntax = buildMermaidMindmap(dateLabel, totalHours, tasksForDay);
-  
   const mermaidContainer = document.createElement('div');
   mermaidContainer.className = 'mermaid mindmap-container';
+  mermaidContainer.id = 'daily-mindmap-view';
   mermaidContainer.textContent = mindmapSyntax;
   
+  // Create list container
+  const listContainer = document.createElement('div');
+  listContainer.className = 'daily-tasks-list';
+  listContainer.id = 'daily-list-view';
+  renderDailyTasksList(listContainer, tasksForDay);
+  
+  // Setup toggle
+  viewToggle.querySelectorAll('.daily-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view;
+      const isMindmap = view === 'mindmap';
+      
+      viewToggle.querySelectorAll('.daily-view-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      mermaidContainer.style.display = isMindmap ? 'flex' : 'none';
+      listContainer.style.display = isMindmap ? 'none' : 'flex';
+    });
+  });
+
   contentDiv.innerHTML = '';
+  contentDiv.appendChild(viewToggle);
   contentDiv.appendChild(mermaidContainer);
+  contentDiv.appendChild(listContainer);
+  listContainer.style.display = 'none';
   
   // Initialize/reinitialize mermaid
   if (typeof mermaid !== 'undefined') {
     mermaid.contentLoaderMarker.push(mermaidContainer);
     mermaid.run();
   }
+}
+
+function renderDailyTasksList(container, tasks) {
+  container.innerHTML = '';
+  tasks.forEach(task => {
+    const item = document.createElement('div');
+    item.className = 'daily-task-item';
+
+    const icon = getTypeIcon(task.type);
+    const hours = fmtHours(task.hours);
+    const stateBadge = task.state ? `<span class="state-badge state-${(task.state || '').toLowerCase().replace(/\s+/g, '-')}">${escHtml(task.state)}</span>` : '';
+
+    item.innerHTML = `
+      <div class="daily-task-icon">${icon}</div>
+      <div class="daily-task-main">
+        <div class="daily-task-title">${escHtml(task.title)}</div>
+        <div class="daily-task-meta">
+          ${task.assignedTo ? `<span class="daily-task-meta-item"><i class="fas fa-user"></i> ${escHtml(task.assignedTo)}</span>` : ''}
+          ${task.type ? `<span class="daily-task-meta-item"><i class="fas fa-tag"></i> ${escHtml(task.type)}</span>` : ''}
+        </div>
+      </div>
+      <div class="daily-task-state">${stateBadge}</div>
+      <div class="daily-task-hours">${hours}</div>
+    `;
+
+    container.appendChild(item);
+  });
+}
+
+function getDailyTasksForDateDirect(isoKey, rows, colMap) {
+  if (!rows || !colMap) return [];
+
+  const tasks = [];
+  
+  if (!colMap.workDate) return tasks;
+
+  rows.forEach(row => {
+    const dateStr = row[colMap.workDate] || '';
+    const parsedDate = parseDateLike(dateStr);
+    
+    if (parsedDate && parsedDate.key === isoKey) {
+      const title = row[colMap.title] || '(Sin título)';
+      const type = row[colMap.type] || '';
+      const assignedTo = row[colMap.assignedTo] || '';
+      const state = row[colMap.state] || '';
+      const hoursStr = row[colMap.completedWork] || '0';
+      const hours = parseHours(hoursStr);
+
+      tasks.push({ title, type, assignedTo, state, hours });
+    }
+  });
+
+  return tasks;
 }
 
 function buildMermaidMindmap(dateLabel, totalHours, tasks) {
@@ -2434,45 +2521,6 @@ function escapeMarkdown(text) {
   return String(text || '')
     .replace(/[*_`#\-\[\]()]/g, ' ')
     .trim();
-}
-
-function getDailyTasksForDate(isoKey, file) {
-  if (!file || !file.rows || !file.colMap) return [];
-
-  const { rows, colMap } = file;
-  const tasks = [];
-  
-  if (!colMap.workDate) return tasks;
-
-  rows.forEach(row => {
-    const dateStr = row[colMap.workDate] || '';
-    const parsedDate = parseDateLike(dateStr);
-    
-    if (parsedDate && parsedDate.key === isoKey) {
-      const title = row[colMap.title] || '(Sin título)';
-      const type = row[colMap.type] || '';
-      const assignedTo = row[colMap.assignedTo] || '';
-      const state = row[colMap.state] || '';
-      const hoursStr = row[colMap.completedWork] || '0';
-      const hours = parseHours(hoursStr);
-
-      tasks.push({ title, type, assignedTo, state, hours });
-    }
-  });
-
-  return tasks;
-}
-
-function getDailyTasksFileIdFromContext() {
-  // Return the file ID of the currently active file
-  // Check if there's a file being viewed in the details section
-  if (AppState.files && AppState.files.length > 0) {
-    // Look for a file with currentDetail flag or use the first one
-    const fileWithDetail = AppState.files.find(f => f.currentDetail);
-    if (fileWithDetail) return fileWithDetail.id;
-    return AppState.files[0].id;
-  }
-  return null;
 }
 
 function getTypeIcon(typeStr) {
