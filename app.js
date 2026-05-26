@@ -2354,17 +2354,22 @@ function getDailyTasksForDate(isoKey, file) {
 
   const { rows, headers, colMap } = file;
   const tasks = [];
+  
+  // Get column name for date
+  const dateCol = pickDateColumn(headers, colMap);
+  if (!dateCol) return tasks;
 
   rows.forEach(row => {
-    const dateStr = row[headers[colMap.workDate]] || '';
-    const dateKey = parseDateLike(dateStr);
+    const dateStr = row[dateCol] || '';
+    const parsedDate = parseDateLike(dateStr);
     
-    if (dateKey === isoKey) {
+    if (parsedDate && parsedDate.key === isoKey) {
       const title = row[headers[colMap.title]] || '(Sin título)';
       const type = row[headers[colMap.type]] || '';
       const assignedTo = row[headers[colMap.assignedTo]] || '';
       const state = row[headers[colMap.state]] || '';
-      const hoursStr = row[headers[colMap.completedWork]] || '0';
+      const hoursCol = pickHoursColumn(colMap);
+      const hoursStr = hoursCol ? row[hoursCol] : '0';
       const hours = parseHours(hoursStr);
 
       tasks.push({ title, type, assignedTo, state, hours });
