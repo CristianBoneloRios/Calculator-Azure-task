@@ -3026,7 +3026,7 @@ a { text-decoration: none; color: inherit; }
 
 .mindmap-branch {
   position: relative;
-  padding-left: 22px;
+  padding-left: 52px;
   min-width: 0;
 }
 
@@ -3045,7 +3045,7 @@ a { text-decoration: none; color: inherit; }
   position: absolute;
   left: 9px;
   top: 16px;
-  width: 18px;
+  width: 50px;
   height: 2px;
   background: rgba(100, 116, 139, 0.55);
 }
@@ -3089,7 +3089,7 @@ a { text-decoration: none; color: inherit; }
 .mindmap-branch-children {
   position: relative;
   margin-top: 8px;
-  margin-left: 12px;
+  margin-left: 30px;
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -3113,9 +3113,9 @@ a { text-decoration: none; color: inherit; }
 .mindmap-leaf-node::before {
   content: '';
   position: absolute;
-  left: -17px;
+  left: -32px;
   top: 50%;
-  width: 15px;
+  width: 30px;
   height: 2px;
   transform: translateY(-50%);
   background: rgba(100, 116, 139, 0.45);
@@ -3124,10 +3124,10 @@ a { text-decoration: none; color: inherit; }
 .mindmap-leaf-node::after {
   content: '';
   position: absolute;
-  left: -4px;
+  left: -32px;
   top: 50%;
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   transform: translateY(-50%);
   background: rgba(100, 116, 139, 0.8);
