@@ -17,9 +17,177 @@ function ensureApplicationInstalled(): void
         installSchema($pdo, __DIR__ . '/schema.sql');
     }
 
+    runColumnMigrations($pdo);
+    ensureDocumentGenerationSchema($pdo);
+    ensureDeveloperIdentitySchema($pdo);
+    ensureNotesCollaborationSchema($pdo);
     seedDefaultAdmin($pdo);
     seedPublicProfile($pdo);
     $isReady = true;
+}
+
+function ensureDocumentGenerationSchema(PDO $pdo): void
+{
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS document_generation_jobs (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id BIGINT UNSIGNED NOT NULL,
+            user_email VARCHAR(255) NOT NULL,
+            input_file_name VARCHAR(255) DEFAULT NULL,
+            input_file_type VARCHAR(50) DEFAULT NULL,
+            input_file_size BIGINT DEFAULT NULL,
+            input_file_path TEXT DEFAULT NULL,
+            input_file_hash VARCHAR(255) DEFAULT NULL,
+            input_base64 LONGTEXT DEFAULT NULL,
+            generation_type VARCHAR(50) DEFAULT NULL,
+            description TEXT DEFAULT NULL,
+            pa_request_id VARCHAR(255) DEFAULT NULL,
+            pa_status VARCHAR(50) DEFAULT NULL,
+            pa_response TEXT DEFAULT NULL,
+            output_file_name VARCHAR(255) DEFAULT NULL,
+            output_file_type VARCHAR(50) DEFAULT NULL,
+            output_file_path TEXT DEFAULT NULL,
+            output_file_size BIGINT DEFAULT NULL,
+            output_file_url TEXT DEFAULT NULL,
+            ai_summary TEXT DEFAULT NULL,
+            ai_confidence DECIMAL(5,2) DEFAULT NULL,
+            status ENUM("pending","processing","completed","error") NOT NULL DEFAULT "pending",
+            error_message TEXT DEFAULT NULL,
+            ip_address VARCHAR(45) DEFAULT NULL,
+            user_agent TEXT DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP NULL DEFAULT NULL,
+            INDEX idx_user (user_id),
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS user_document_security (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id BIGINT UNSIGNED NOT NULL UNIQUE,
+            access_key_hash VARCHAR(255) NOT NULL,
+            is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+            last_verified_at TIMESTAMP NULL DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_user_doc_security_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+}
+
+/**
+ * Safely add any columns that may be missing from tables created before these
+ * columns were added to schema.sql.  Uses information_schema so it is safe to
+ * run on every request – the query is fast and the ALTER is only executed when
+ * the column is actually absent.
+ */
+function runColumnMigrations(PDO $pdo): void
+{
+    $migrations = [
+        // users – 2FA columns
+        ['users', 'two_factor_secret',  'VARCHAR(255) DEFAULT NULL   AFTER password_hash'],
+        ['users', 'two_factor_enabled', 'TINYINT(1)  NOT NULL DEFAULT 0 AFTER two_factor_secret'],
+        ['users', 'profile_photo_path', 'VARCHAR(255) DEFAULT NULL   AFTER role'],
+        ['users', 'last_login_at',      'DATETIME DEFAULT NULL        AFTER profile_photo_path'],
+        ['users', 'last_seen_at',       'DATETIME DEFAULT NULL        AFTER last_login_at'],
+        // integrations – outbound URL stored in metadata (JSON), no new column needed
+        // calendar_events – no missing columns expected
+    ];
+
+    foreach ($migrations as [$table, $column, $definition]) {
+        if (!columnExists($pdo, $table, $column)) {
+            try {
+                $pdo->exec("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+            } catch (Throwable $e) {
+                error_log("Migration failed [{$table}.{$column}]: " . $e->getMessage());
+            }
+        }
+    }
+}
+
+function columnExists(PDO $pdo, string $table, string $column): bool
+{
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND table_name   = :table
+               AND column_name  = :column'
+        );
+        $stmt->execute(['table' => $table, 'column' => $column]);
+        return (int) $stmt->fetchColumn() > 0;
+    } catch (Throwable $throwable) {
+        try {
+            $stmt = $pdo->query('SHOW COLUMNS FROM `' . str_replace('`', '``', $table) . '`');
+            $columns = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+            foreach ($columns as $columnMeta) {
+                if (isset($columnMeta['Field']) && (string) $columnMeta['Field'] === $column) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Throwable $fallbackThrowable) {
+            throw $throwable;
+        }
+    }
+}
+
+function ensureTwoFactorSchemaReady(PDO $pdo): void
+{
+    $requiredColumns = [
+        ['users', 'two_factor_secret'],
+        ['users', 'two_factor_enabled'],
+    ];
+
+    $missingColumns = [];
+    foreach ($requiredColumns as [$table, $column]) {
+        if (!columnExists($pdo, $table, $column)) {
+            $missingColumns[] = $table . '.' . $column;
+        }
+    }
+
+    if ($missingColumns === []) {
+        ensureTwoFactorRecoveryTable($pdo);
+        return;
+    }
+
+    // Retry migrations once in case schema changed after a deployment.
+    runColumnMigrations($pdo);
+
+    $stillMissing = [];
+    foreach ($requiredColumns as [$table, $column]) {
+        if (!columnExists($pdo, $table, $column)) {
+            $stillMissing[] = $table . '.' . $column;
+        }
+    }
+
+    if ($stillMissing !== []) {
+        throw new RuntimeException(
+            'La base de datos no tiene las columnas requeridas para 2FA: ' . implode(', ', $stillMissing) . '. Ejecuta la migracion del esquema (api/schema.sql) en Hostinger y vuelve a intentar.'
+        );
+    }
+
+    ensureTwoFactorRecoveryTable($pdo);
+}
+
+function ensureTwoFactorRecoveryTable(PDO $pdo): void
+{
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS two_factor_recovery_codes (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            code_hash VARCHAR(255) NOT NULL,
+            used_at DATETIME DEFAULT NULL,
+            is_valid TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_user_id (user_id),
+            KEY idx_used_at (used_at),
+            CONSTRAINT fk_two_factor_recovery_codes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
 }
 
 function shouldInstallSchema(PDO $pdo): bool
@@ -49,11 +217,21 @@ function shouldInstallSchema(PDO $pdo): bool
 
 function tableExists(PDO $pdo, string $tableName): bool
 {
-    $sql = 'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :table_name';
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute(['table_name' => $tableName]);
+    try {
+        $sql = 'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = :table_name';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute(['table_name' => $tableName]);
 
-    return (int) $stmt->fetchColumn() > 0;
+        return (int) $stmt->fetchColumn() > 0;
+    } catch (Throwable $throwable) {
+        try {
+            $stmt = $pdo->prepare('SHOW TABLES LIKE :table_name');
+            $stmt->execute(['table_name' => $tableName]);
+            return (bool) $stmt->fetchColumn();
+        } catch (Throwable $fallbackThrowable) {
+            throw $throwable;
+        }
+    }
 }
 
 function installSchema(PDO $pdo, string $schemaPath): void
@@ -148,6 +326,16 @@ function registerUserAccount(string $fullName, string $email, string $password):
         throw new InvalidArgumentException('La contrasena debe tener al menos 8 caracteres.');
     }
 
+    $hasLetter = preg_match('/[A-Za-z]/', $password) === 1;
+    $hasUpper = preg_match('/[A-Z]/', $password) === 1;
+    $hasLower = preg_match('/[a-z]/', $password) === 1;
+    $hasNumber = preg_match('/\d/', $password) === 1;
+    $hasSpecial = preg_match('/[^A-Za-z0-9]/', $password) === 1;
+
+    if (!$hasLetter || !$hasUpper || !$hasLower || !$hasNumber || !$hasSpecial) {
+        throw new InvalidArgumentException('La contrasena debe incluir letra, mayuscula, minuscula, numero y caracter especial.');
+    }
+
     $stmt = db()->prepare('INSERT INTO users (full_name, email, password_hash, role, last_login_at, last_seen_at) VALUES (:full_name, :email, :password_hash, :role, NULL, NULL)');
 
     try {
@@ -179,7 +367,7 @@ function registerUserAccount(string $fullName, string $email, string $password):
 
 function generateTwoFactorSecret(): string
 {
-    return bin2hex(random_bytes(20));
+    return encodeBase32(random_bytes(20));
 }
 
 function verifyTwoFactorCode(string $secret, string $code): bool
@@ -188,13 +376,18 @@ function verifyTwoFactorCode(string $secret, string $code): bool
         return false;
     }
 
+    $secretKey = decodeBase32($secret);
+    if ($secretKey === null || $secretKey === '') {
+        return false;
+    }
+
     // TOTP: Time-based One-Time Password
-    $time = floor(time() / 30);
+    $time = (int) floor(time() / 30);
     $hmacs = [];
 
     for ($i = -1; $i <= 1; $i++) {
-        $timestamp = pack('J', $time + $i);
-        $hmac = hash_hmac('sha1', $timestamp, hex2bin($secret), true);
+        $timestamp = pack('N2', 0, $time + $i);
+        $hmac = hash_hmac('sha1', $timestamp, $secretKey, true);
         $offset = ord($hmac[19]) & 0xf;
         $code_int = (ord($hmac[$offset]) & 0x7f) << 24 |
                     (ord($hmac[$offset + 1]) & 0xff) << 16 |
@@ -206,6 +399,145 @@ function verifyTwoFactorCode(string $secret, string $code): bool
     return in_array($code, $hmacs, true);
 }
 
+function generateTwoFactorRecoveryCodes(int $count = 8): array
+{
+    $codes = [];
+    $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+    while (count($codes) < $count) {
+        $raw = '';
+        for ($i = 0; $i < 8; $i++) {
+            $raw .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        }
+
+        $formatted = substr($raw, 0, 4) . '-' . substr($raw, 4, 4);
+        $codes[$formatted] = true;
+    }
+
+    return array_keys($codes);
+}
+
+function storeTwoFactorRecoveryCodes(PDO $pdo, int $userId, array $plainCodes): void
+{
+    $pdo->prepare('DELETE FROM two_factor_recovery_codes WHERE user_id = :user_id')
+        ->execute(['user_id' => $userId]);
+
+    $insert = $pdo->prepare(
+        'INSERT INTO two_factor_recovery_codes (user_id, code_hash, used_at, is_valid)
+         VALUES (:user_id, :code_hash, NULL, 1)'
+    );
+
+    foreach ($plainCodes as $plainCode) {
+        $insert->execute([
+            'user_id' => $userId,
+            'code_hash' => password_hash(normalizeTwoFactorRecoveryCode((string) $plainCode), PASSWORD_DEFAULT),
+        ]);
+    }
+}
+
+function consumeTwoFactorRecoveryCode(PDO $pdo, int $userId, string $candidateCode): bool
+{
+    $normalizedCandidate = normalizeTwoFactorRecoveryCode($candidateCode);
+    if ($normalizedCandidate === '') {
+        return false;
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT id, code_hash
+         FROM two_factor_recovery_codes
+         WHERE user_id = :user_id
+           AND is_valid = 1
+           AND used_at IS NULL
+         ORDER BY id ASC'
+    );
+    $stmt->execute(['user_id' => $userId]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!is_array($rows) || $rows === []) {
+        return false;
+    }
+
+    foreach ($rows as $row) {
+        $hash = (string) ($row['code_hash'] ?? '');
+        if ($hash === '' || !password_verify($normalizedCandidate, $hash)) {
+            continue;
+        }
+
+        $update = $pdo->prepare(
+            'UPDATE two_factor_recovery_codes
+             SET used_at = :used_at, is_valid = 0
+             WHERE id = :id AND is_valid = 1 AND used_at IS NULL'
+        );
+        $update->execute([
+            'used_at' => date('Y-m-d H:i:s'),
+            'id' => (int) $row['id'],
+        ]);
+
+        return $update->rowCount() > 0;
+    }
+
+    return false;
+}
+
+function normalizeTwoFactorRecoveryCode(string $value): string
+{
+    return strtoupper(preg_replace('/[^A-Z0-9]/i', '', $value) ?? '');
+}
+
+function encodeBase32(string $binary): string
+{
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $bits = '';
+    $length = strlen($binary);
+
+    for ($index = 0; $index < $length; $index++) {
+        $bits .= str_pad(decbin(ord($binary[$index])), 8, '0', STR_PAD_LEFT);
+    }
+
+    $output = '';
+    $bitLength = strlen($bits);
+    for ($offset = 0; $offset < $bitLength; $offset += 5) {
+        $chunk = substr($bits, $offset, 5);
+        if ($chunk === '') {
+            continue;
+        }
+
+        $chunk = str_pad($chunk, 5, '0', STR_PAD_RIGHT);
+        $output .= $alphabet[bindec($chunk)];
+    }
+
+    return $output;
+}
+
+function decodeBase32(string $encoded): ?string
+{
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $clean = strtoupper(preg_replace('/[^A-Z2-7]/', '', $encoded) ?? '');
+
+    if ($clean === '') {
+        return null;
+    }
+
+    $bits = '';
+    $length = strlen($clean);
+    for ($index = 0; $index < $length; $index++) {
+        $position = strpos($alphabet, $clean[$index]);
+        if ($position === false) {
+            return null;
+        }
+
+        $bits .= str_pad(decbin($position), 5, '0', STR_PAD_LEFT);
+    }
+
+    $output = '';
+    $bitLength = strlen($bits);
+    for ($offset = 0; $offset + 8 <= $bitLength; $offset += 8) {
+        $output .= chr(bindec(substr($bits, $offset, 8)));
+    }
+
+    return $output;
+}
+
 function sanitizeUser(array $user): array
 {
     return [
@@ -213,6 +545,7 @@ function sanitizeUser(array $user): array
         'full_name' => (string) $user['full_name'],
         'email' => (string) $user['email'],
         'role' => (string) $user['role'],
+        'two_factor_enabled' => !empty($user['two_factor_enabled']),
         'profile_photo_path' => $user['profile_photo_path'] ? (string) $user['profile_photo_path'] : null,
         'last_login_at' => $user['last_login_at'] ? (string) $user['last_login_at'] : null,
         'last_seen_at' => $user['last_seen_at'] ? (string) $user['last_seen_at'] : null,
@@ -529,15 +862,48 @@ function getPowerAutomateSetup(int $userId): array
     $metadata = decodeIntegrationMetadata($integration['metadata'] ?? null);
 
     return [
-        'configured' => !empty($metadata['webhook_secret_hash']),
-        'webhook_url' => buildAppUrl('/api/power_automate.php'),
-        'header_name' => 'X-Power-Automate-Key',
-        'token_preview' => $integration ? 'pa_' . (int) $integration['id'] . '.***' : null,
-        'external_account_email' => $metadata['external_account_email'] ?? $source['external_account_email'] ?? null,
-        'last_synced_at' => $source['last_synced_at'] ?? null,
-        'sync_status' => $source['sync_status'] ?? 'pending',
-        'last_payload_at' => $metadata['last_payload_at'] ?? null,
+        'configured'            => !empty($metadata['webhook_secret_hash']),
+        'webhook_url'           => buildAppUrl('/api/power_automate.php'),
+        'header_name'           => 'X-Power-Automate-Key',
+        'token_preview'         => $integration ? 'pa_' . (int) $integration['id'] . '.***' : null,
+        'external_account_email'=> $metadata['external_account_email'] ?? $source['external_account_email'] ?? null,
+        'last_synced_at'        => $source['last_synced_at'] ?? null,
+        'sync_status'           => $source['sync_status'] ?? 'pending',
+        'last_payload_at'       => $metadata['last_payload_at'] ?? null,
+        'outbound_webhook_url'  => $metadata['outbound_webhook_url'] ?? null,
     ];
+}
+
+function savePowerAutomateOutboundUrl(int $userId, ?string $url): void
+{
+    $pdo         = db();
+    $integration = getPowerAutomateIntegration($userId);
+
+    if (!$integration) {
+        $source = ensureCalendarSource($userId, 'power_automate');
+        $insert = $pdo->prepare('INSERT INTO integrations (user_id, provider, status, metadata) VALUES (:user_id, :provider, :status, :metadata)');
+        $insert->execute([
+            'user_id'  => $userId,
+            'provider' => 'power_automate_calendar',
+            'status'   => 'configured',
+            'metadata' => encodeIntegrationMetadata(['source_id' => (int) $source['id']]),
+        ]);
+        $integration = getPowerAutomateIntegration($userId);
+    }
+
+    if (!$integration) {
+        throw new RuntimeException('No se pudo inicializar la integracion de Power Automate.');
+    }
+
+    $metadata = decodeIntegrationMetadata($integration['metadata'] ?? null);
+    if ($url !== null && $url !== '') {
+        $metadata['outbound_webhook_url'] = $url;
+    } else {
+        unset($metadata['outbound_webhook_url']);
+    }
+
+    $pdo->prepare('UPDATE integrations SET metadata = :metadata, updated_at = CURRENT_TIMESTAMP WHERE id = :id')
+        ->execute(['metadata' => encodeIntegrationMetadata($metadata), 'id' => (int) $integration['id']]);
 }
 
 function findPowerAutomateIntegrationByToken(string $token): ?array
@@ -748,18 +1114,36 @@ function saveProfilePhoto(array $user, array $file, bool $alsoUpdatePublicProfil
         throw new RuntimeException('No se pudo subir la imagen.');
     }
 
+    $fileSize = isset($file['size']) ? (int) $file['size'] : 0;
+    if ($fileSize <= 0) {
+        throw new RuntimeException('La imagen recibida esta vacia.');
+    }
+
+    if ($fileSize > 5 * 1024 * 1024) {
+        throw new RuntimeException('La imagen supera el limite de 5MB.');
+    }
+
     $tmpPath = (string) ($file['tmp_name'] ?? '');
     if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
         throw new RuntimeException('Archivo temporal invalido.');
     }
 
     $mimeType = mime_content_type($tmpPath) ?: 'application/octet-stream';
-    if (!str_starts_with($mimeType, 'image/')) {
-        throw new RuntimeException('Solo se permiten imagenes.');
+    $allowedMimeTypes = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+    ];
+
+    if (!isset($allowedMimeTypes[$mimeType])) {
+        throw new RuntimeException('Solo se permiten imagenes PNG, JPG o WebP.');
     }
 
-    $extension = pathinfo((string) ($file['name'] ?? 'photo.png'), PATHINFO_EXTENSION);
-    $extension = $extension !== '' ? strtolower($extension) : 'png';
+    if (@getimagesize($tmpPath) === false) {
+        throw new RuntimeException('El archivo recibido no es una imagen valida.');
+    }
+
+    $extension = $allowedMimeTypes[$mimeType];
 
     $relativeDir = 'uploads/profile-photos';
     $absoluteDir = APP_ROOT . '/' . $relativeDir;
@@ -767,7 +1151,7 @@ function saveProfilePhoto(array $user, array $file, bool $alsoUpdatePublicProfil
         throw new RuntimeException('No se pudo crear la carpeta de fotos.');
     }
 
-    $filename = sprintf('user-%d-%s.%s', (int) $user['id'], date('YmdHis'), $extension);
+    $filename = sprintf('user-%d-%s-%s.%s', (int) $user['id'], date('YmdHis'), bin2hex(random_bytes(4)), $extension);
     $relativePath = $relativeDir . '/' . $filename;
     $absolutePath = APP_ROOT . '/' . $relativePath;
 
@@ -786,7 +1170,7 @@ function saveProfilePhoto(array $user, array $file, bool $alsoUpdatePublicProfil
         'file_path' => $relativePath,
         'original_name' => substr((string) ($file['name'] ?? 'photo'), 0, 255),
         'mime_type' => $mimeType,
-        'file_size' => isset($file['size']) ? (int) $file['size'] : null,
+        'file_size' => $fileSize,
     ]);
 
     if ($alsoUpdatePublicProfile) {
@@ -799,4 +1183,196 @@ function saveProfilePhoto(array $user, array $file, bool $alsoUpdatePublicProfil
     }
 
     return $relativePath;
+}
+
+function ensureDeveloperIdentitySchema(PDO $pdo): void
+{
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS developer_identity_profile (
+            id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+            display_name VARCHAR(150) NOT NULL,
+            role_label VARCHAR(150) NOT NULL,
+            photo_path VARCHAR(255) DEFAULT NULL,
+            owner_user_id INT UNSIGNED NOT NULL,
+            owner_email VARCHAR(190) NOT NULL,
+            updated_by_user_id INT UNSIGNED DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            CONSTRAINT fk_dev_identity_owner FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+            CONSTRAINT fk_dev_identity_updated_by FOREIGN KEY (updated_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $existing = $pdo->query('SELECT id FROM developer_identity_profile WHERE id = 1 LIMIT 1')->fetchColumn();
+    if ($existing !== false) {
+        return;
+    }
+
+    $owner = resolveDeveloperIdentityOwnerUser($pdo);
+    if ($owner === null) {
+        return;
+    }
+
+    $insert = $pdo->prepare(
+        'INSERT INTO developer_identity_profile (id, display_name, role_label, photo_path, owner_user_id, owner_email, updated_by_user_id)
+         VALUES (1, :display_name, :role_label, :photo_path, :owner_user_id, :owner_email, :updated_by_user_id)'
+    );
+    $insert->execute([
+        'display_name' => env('DEVELOPER_IDENTITY_NAME', (string) ($owner['full_name'] ?? 'Cristian Jesus Bonelo Rios')),
+        'role_label' => env('DEVELOPER_IDENTITY_ROLE', 'Software Quality Analyst'),
+        'photo_path' => $owner['profile_photo_path'] ?: null,
+        'owner_user_id' => (int) $owner['id'],
+        'owner_email' => (string) $owner['email'],
+        'updated_by_user_id' => (int) $owner['id'],
+    ]);
+}
+
+function resolveDeveloperIdentityOwnerUser(PDO $pdo): ?array
+{
+    $ownerEmail = strtolower(trim((string) env('DEVELOPER_IDENTITY_OWNER_EMAIL', 'cristianbonelorios@hotmail.com')));
+
+    $byEmail = $pdo->prepare('SELECT * FROM users WHERE email = :email AND role = :role LIMIT 1');
+    $byEmail->execute(['email' => $ownerEmail, 'role' => 'admin']);
+    $owner = $byEmail->fetch(PDO::FETCH_ASSOC);
+    if (is_array($owner)) {
+        return $owner;
+    }
+
+    $firstAdmin = $pdo->query("SELECT * FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+    return is_array($firstAdmin) ? $firstAdmin : null;
+}
+
+function getDeveloperIdentityProfile(): array
+{
+    $pdo = db();
+    ensureDeveloperIdentitySchema($pdo);
+
+    $stmt = $pdo->query('SELECT * FROM developer_identity_profile WHERE id = 1 LIMIT 1');
+    $profile = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($profile)) {
+        throw new RuntimeException('No se pudo cargar el perfil del desarrollador.');
+    }
+
+    return [
+        'id' => 1,
+        'display_name' => (string) $profile['display_name'],
+        'role_label' => (string) $profile['role_label'],
+        'photo_path' => $profile['photo_path'] ? (string) $profile['photo_path'] : null,
+        'photo_url' => $profile['photo_path'] ? buildAssetUrl((string) $profile['photo_path']) : null,
+        'owner_user_id' => (int) $profile['owner_user_id'],
+        'owner_email' => (string) $profile['owner_email'],
+        'updated_by_user_id' => $profile['updated_by_user_id'] ? (int) $profile['updated_by_user_id'] : null,
+        'created_at' => (string) $profile['created_at'],
+        'updated_at' => (string) $profile['updated_at'],
+    ];
+}
+
+function userCanManageDeveloperIdentity(array $user, ?array $profile = null): bool
+{
+    if ((string) ($user['role'] ?? '') !== 'admin') {
+        return false;
+    }
+
+    $resolvedProfile = $profile ?? getDeveloperIdentityProfile();
+    return (int) ($resolvedProfile['owner_user_id'] ?? 0) === (int) ($user['id'] ?? 0);
+}
+
+function saveDeveloperIdentityPhoto(array $actorUser, array $file): string
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        throw new RuntimeException('No se pudo subir la imagen del desarrollador.');
+    }
+
+    $fileSize = isset($file['size']) ? (int) $file['size'] : 0;
+    if ($fileSize <= 0) {
+        throw new RuntimeException('La imagen recibida esta vacia.');
+    }
+
+    if ($fileSize > 5 * 1024 * 1024) {
+        throw new RuntimeException('La imagen supera el limite de 5MB.');
+    }
+
+    $tmpPath = (string) ($file['tmp_name'] ?? '');
+    if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+        throw new RuntimeException('Archivo temporal invalido.');
+    }
+
+    $mimeType = mime_content_type($tmpPath) ?: 'application/octet-stream';
+    $allowedMimeTypes = [
+        'image/jpeg' => 'jpg',
+        'image/png' => 'png',
+        'image/webp' => 'webp',
+    ];
+
+    if (!isset($allowedMimeTypes[$mimeType])) {
+        throw new RuntimeException('Solo se permiten imagenes PNG, JPG o WebP.');
+    }
+
+    if (@getimagesize($tmpPath) === false) {
+        throw new RuntimeException('El archivo recibido no es una imagen valida.');
+    }
+
+    $extension = $allowedMimeTypes[$mimeType];
+    $relativeDir = 'uploads/developer-photos';
+    $absoluteDir = APP_ROOT . '/' . $relativeDir;
+    if (!is_dir($absoluteDir) && !mkdir($absoluteDir, 0775, true) && !is_dir($absoluteDir)) {
+        throw new RuntimeException('No se pudo crear la carpeta de foto del desarrollador.');
+    }
+
+    $filename = sprintf('developer-owner-%d-%s-%s.%s', (int) $actorUser['id'], date('YmdHis'), bin2hex(random_bytes(4)), $extension);
+    $relativePath = $relativeDir . '/' . $filename;
+    $absolutePath = APP_ROOT . '/' . $relativePath;
+
+    if (!move_uploaded_file($tmpPath, $absolutePath)) {
+        throw new RuntimeException('No se pudo guardar la foto del desarrollador en el servidor.');
+    }
+
+    db()->prepare('UPDATE developer_identity_profile SET photo_path = :photo_path, updated_by_user_id = :updated_by_user_id WHERE id = 1')
+        ->execute([
+            'photo_path' => $relativePath,
+            'updated_by_user_id' => (int) $actorUser['id'],
+        ]);
+
+    return $relativePath;
+}
+
+function ensureNotesCollaborationSchema(PDO $pdo): void
+{
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS note_comments (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            note_id INT UNSIGNED NOT NULL,
+            user_id INT UNSIGNED NOT NULL,
+            parent_comment_id BIGINT UNSIGNED DEFAULT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_note_comments_note (note_id),
+            KEY idx_note_comments_user (user_id),
+            KEY idx_note_comments_parent (parent_comment_id),
+            CONSTRAINT fk_note_comments_note FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+            CONSTRAINT fk_note_comments_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            CONSTRAINT fk_note_comments_parent FOREIGN KEY (parent_comment_id) REFERENCES note_comments(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS note_shares (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            note_id INT UNSIGNED NOT NULL,
+            owner_user_id INT UNSIGNED NOT NULL,
+            invited_email VARCHAR(190) NOT NULL,
+            invited_user_id INT UNSIGNED DEFAULT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_note_share_email (note_id, invited_email),
+            KEY idx_note_shares_note (note_id),
+            KEY idx_note_shares_owner (owner_user_id),
+            KEY idx_note_shares_invited_user (invited_user_id),
+            CONSTRAINT fk_note_shares_note FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
+            CONSTRAINT fk_note_shares_owner FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            CONSTRAINT fk_note_shares_invited_user FOREIGN KEY (invited_user_id) REFERENCES users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
 }

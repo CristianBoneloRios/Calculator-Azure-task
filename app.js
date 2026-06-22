@@ -38,7 +38,7 @@ const SHARED_PROFILE_PHOTO_CANDIDATES = [
   'assets/profile-photo.webp'
 ];
 
-const AZURE_DEFAULT_MAX_ITEMS = 10000;
+const AZURE_DEFAULT_MAX_ITEMS = 5000;
 
 function getAzureBackendCandidates() {
   const candidates = ['api/azure.php', './api/azure.php', '/api/azure.php'];
@@ -175,6 +175,8 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.azureLoadingModal     = document.getElementById('azureLoadingModal');
   DOM.azureLoadingStatus    = document.getElementById('azureLoadingStatus');
   DOM.azureLoadingText      = document.getElementById('azureLoadingText');
+  DOM.azureLoadingProgressFill = document.getElementById('azureLoadingProgressFill');
+  DOM.azureLoadingPercent   = document.getElementById('azureLoadingPercent');
 
   // Azure tasks section
   DOM.azureConnectedStrip   = document.getElementById('azureConnectedStrip');
@@ -183,9 +185,15 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.azureShowTasksBtnLabel= document.getElementById('azureShowTasksBtnLabel');
   DOM.azureTasksSection     = document.getElementById('azureTasksSection');
   DOM.azureTasksSummaryText = document.getElementById('azureTasksSummaryText');
+  DOM.azureSummaryProgress  = document.getElementById('azureSummaryProgress');
+  DOM.azureSummaryProgressFill = document.getElementById('azureSummaryProgressFill');
+  DOM.azureSummaryProgressPercent = document.getElementById('azureSummaryProgressPercent');
   DOM.azureReloadBtn        = document.getElementById('azureReloadBtn');
   DOM.azureFilterUser       = document.getElementById('azureFilterUser');
   DOM.azureFilterState      = document.getElementById('azureFilterState');
+  DOM.azureFilterType       = document.getElementById('azureFilterType');
+  DOM.azureFilterDateFrom   = document.getElementById('azureFilterDateFrom');
+  DOM.azureFilterDateTo     = document.getElementById('azureFilterDateTo');
   DOM.azureApplyFilterBtn   = document.getElementById('azureApplyFilterBtn');
   DOM.azureResetFilterBtn   = document.getElementById('azureResetFilterBtn');
   DOM.azureSkeleton         = document.getElementById('azureSkeleton');
@@ -196,14 +204,18 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.footerPhotoWrap       = document.getElementById('footerPhotoWrap');
   DOM.footerPhotoPreviewBackdrop = document.getElementById('footerPhotoPreviewBackdrop');
   DOM.footerPhotoPreviewImg = document.getElementById('footerPhotoPreviewImg');
+  DOM.workspaceLoginBtn     = document.getElementById('workspaceLoginBtn');
+  DOM.workspaceLoginBtnName = document.getElementById('workspaceLoginBtnName');
+  DOM.workspaceLoginBtnRole = document.getElementById('workspaceLoginBtnRole');
 
   const hasLocalPhoto = restoreAboutPhotoFromStorage();
   if (!hasLocalPhoto) {
-    loadSharedAboutPhoto();
+    loadPublicProfilePhoto();
   }
   restoreAzureConnection();
   initUploadEvents();
   initEvents();
+  syncWorkspaceLoginButton();
   updateGlobalStats();
   updateFileHistory();
   updateResultsEmptyState();
@@ -263,6 +275,9 @@ function initEvents() {
   DOM.azureResetFilterBtn.addEventListener('click', resetAzureFilters);
   DOM.azureFilterUser.addEventListener('keydown', e => { if (e.key === 'Enter') applyAzureFilters(); });
   DOM.azureFilterState.addEventListener('change', applyAzureFilters);
+  DOM.azureFilterType.addEventListener('change', applyAzureFilters);
+  DOM.azureFilterDateFrom.addEventListener('change', applyAzureFilters);
+  DOM.azureFilterDateTo.addEventListener('change', applyAzureFilters);
 
   // Nav sidebar items
   const navItems = document.querySelectorAll('.nav-item[data-section]');
@@ -352,6 +367,45 @@ function initFooterPhotoHoverPreview() {
 
   DOM.footerPhotoWrap.addEventListener('mouseenter', showPreview);
   DOM.footerPhotoWrap.addEventListener('mouseleave', hidePreview);
+}
+
+async function syncWorkspaceLoginButton() {
+  if (!DOM.workspaceLoginBtn || !DOM.workspaceLoginBtnName || !DOM.workspaceLoginBtnRole) return;
+
+  DOM.workspaceLoginBtnName.textContent = 'Iniciar sesión';
+  DOM.workspaceLoginBtnName.classList.remove('logged-user');
+  DOM.workspaceLoginBtnRole.textContent = 'Acceder al Workspace';
+
+  try {
+    const response = await fetch('api/auth.php?action=session', {
+      method: 'GET',
+      credentials: 'same-origin'
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json().catch(() => null);
+    if (!data || !data.authenticated || !data.user) return;
+
+    const fullName = String(data.user.full_name || data.user.email || '').trim();
+    if (!fullName) return;
+
+    DOM.workspaceLoginBtnName.innerHTML = `Sesión iniciada: <span class="workspace-user-highlight">${escapeHtml(fullName)}</span>`;
+    DOM.workspaceLoginBtnName.classList.add('logged-user');
+    DOM.workspaceLoginBtnRole.textContent = 'Entrar al Workspace';
+    DOM.workspaceLoginBtn.title = `Sesión iniciada: ${fullName}`;
+  } catch (_) {
+    // Silent fallback to default state if auth service is unavailable.
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function setActiveNavItem(sectionId) {
@@ -509,6 +563,32 @@ function loadSharedAboutPhoto() {
   };
 
   tryLoad(0);
+}
+
+async function loadPublicProfilePhoto() {
+  try {
+    const response = await fetch('api/public_profile.php', {
+      method: 'GET',
+      credentials: 'same-origin'
+    });
+
+    if (!response.ok) {
+      loadSharedAboutPhoto();
+      return;
+    }
+
+    const data = await response.json().catch(() => null);
+    const photoUrl = String(data?.profile?.photo_url || '').trim();
+
+    if (photoUrl !== '') {
+      applyAboutPhoto(photoUrl);
+      return;
+    }
+
+    loadSharedAboutPhoto();
+  } catch (_) {
+    loadSharedAboutPhoto();
+  }
 }
 
 async function handlePublishPhotoToGithub() {
@@ -1625,6 +1705,8 @@ function buildTable(rows, headers, colMap) {
   const tbody = document.createElement('tbody');
   rows.forEach(row => {
     const tr = document.createElement('tr');
+    tr.classList.add('azure-row-clickable');
+    tr.addEventListener('click', () => openAzureTaskDetailModal(row));
     headers.forEach(h => {
       const td = document.createElement('td');
       const rawVal = row[h] !== undefined ? String(row[h]) : '';
@@ -1674,6 +1756,166 @@ function buildTable(rows, headers, colMap) {
 
   container.appendChild(table);
   return container;
+}
+
+function openAzureTaskDetailModal(row) {
+  let backdrop = document.getElementById('azureTaskDetailBackdrop');
+  let modal = document.getElementById('azureTaskDetailModal');
+
+  if (!backdrop || !modal) {
+    createAzureTaskDetailModal();
+    backdrop = document.getElementById('azureTaskDetailBackdrop');
+    modal = document.getElementById('azureTaskDetailModal');
+  }
+
+  const body = document.getElementById('azureTaskDetailBody');
+  const title = document.getElementById('azureTaskDetailTitle');
+  const subtitle = document.getElementById('azureTaskDetailSubtitle');
+  const azureLinkBtn = document.getElementById('azureTaskOpenInDevOpsBtn');
+  const azureCopyLinkBtn = document.getElementById('azureTaskCopyLinkBtn');
+  if (!backdrop || !modal || !body || !title || !subtitle || !azureLinkBtn || !azureCopyLinkBtn) return;
+
+  const taskId = String(row['ID'] || row['Id'] || '').trim();
+  const taskTitle = String(row['Titulo'] || row['Título'] || row['System.Title'] || 'Detalle de tarea').trim();
+
+  title.textContent = taskId ? `Task ${taskId}` : 'Detalle de tarea';
+  subtitle.textContent = taskTitle || 'Sin titulo';
+
+  const orgUrl = String(AzureConfig.orgUrl || '').trim();
+  const project = String(AzureConfig.project || '').trim();
+  let openUrl = '';
+  if (taskId && orgUrl && project) {
+    openUrl = `${orgUrl}/${encodeURIComponent(project)}/_workitems/edit/${encodeURIComponent(taskId)}`;
+    azureLinkBtn.href = openUrl;
+    azureLinkBtn.style.display = '';
+    azureLinkBtn.setAttribute('aria-disabled', 'false');
+
+    azureCopyLinkBtn.dataset.url = openUrl;
+    azureCopyLinkBtn.style.display = '';
+    azureCopyLinkBtn.disabled = false;
+    azureCopyLinkBtn.innerHTML = '<i class="fas fa-link"></i> Copiar URL';
+  } else {
+    azureLinkBtn.removeAttribute('href');
+    azureLinkBtn.style.display = 'none';
+    azureLinkBtn.setAttribute('aria-disabled', 'true');
+
+    azureCopyLinkBtn.dataset.url = '';
+    azureCopyLinkBtn.style.display = 'none';
+    azureCopyLinkBtn.disabled = true;
+  }
+
+  const entries = Object.entries(row).filter(([key]) => !String(key).startsWith('__'));
+  body.innerHTML = entries.map(([key, value]) => {
+    const printable = value === null || value === undefined || value === '' ? '—' : String(value);
+    return `
+      <div class="azure-task-detail-item">
+        <span class="azure-task-detail-key">${escHtml(key)}</span>
+        <span class="azure-task-detail-value">${escHtml(printable)}</span>
+      </div>
+    `;
+  }).join('');
+
+  backdrop.classList.add('active');
+  modal.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function createAzureTaskDetailModal() {
+  const backdrop = document.createElement('div');
+  backdrop.id = 'azureTaskDetailBackdrop';
+  backdrop.className = 'daily-tasks-modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.id = 'azureTaskDetailModal';
+  modal.className = 'daily-tasks-modal azure-task-detail-modal';
+  modal.innerHTML = `
+    <button class="daily-tasks-modal-close" id="azureTaskDetailClose" title="Cerrar">
+      <i class="fas fa-times"></i>
+    </button>
+    <div class="daily-tasks-modal-header">
+      <div class="daily-tasks-modal-title" id="azureTaskDetailTitle">Detalle de tarea</div>
+      <div class="daily-tasks-modal-badge" style="background: rgba(245,158,11,.2); color: #fcd34d; border-color: rgba(245,158,11,.3);">Azure</div>
+    </div>
+    <div class="daily-tasks-modal-divider"></div>
+    <div class="azure-task-detail-subtitle" id="azureTaskDetailSubtitle"></div>
+    <div class="azure-task-detail-actions">
+      <a id="azureTaskOpenInDevOpsBtn" class="btn btn-azure btn-sm" target="_blank" rel="noopener noreferrer" style="display:none;">
+        <i class="fab fa-microsoft"></i> Abrir en Azure DevOps
+      </a>
+      <button id="azureTaskCopyLinkBtn" class="btn btn-outline btn-sm" type="button" style="display:none;">
+        <i class="fas fa-link"></i> Copiar URL
+      </button>
+    </div>
+    <div class="daily-tasks-modal-content azure-task-detail-body" id="azureTaskDetailBody"></div>
+  `;
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(modal);
+
+  const closeModal = () => {
+    backdrop.classList.remove('active');
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+  };
+
+  backdrop.addEventListener('click', closeModal);
+  const closeBtn = document.getElementById('azureTaskDetailClose');
+  const copyBtn = document.getElementById('azureTaskCopyLinkBtn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closeModal);
+  }
+
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      const url = String(copyBtn.dataset.url || '').trim();
+      if (!url) {
+        showToast('No hay URL disponible para copiar.', 'error');
+        return;
+      }
+
+      let copied = false;
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(url);
+          copied = true;
+        }
+      } catch (_) {
+        copied = false;
+      }
+
+      if (!copied) {
+        const helper = document.createElement('textarea');
+        helper.value = url;
+        helper.setAttribute('readonly', 'true');
+        helper.style.position = 'fixed';
+        helper.style.opacity = '0';
+        document.body.appendChild(helper);
+        helper.select();
+        try {
+          copied = document.execCommand('copy');
+        } catch (_) {
+          copied = false;
+        }
+        document.body.removeChild(helper);
+      }
+
+      if (copied) {
+        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copiado';
+        showToast('URL copiada para compartir en Teams/Correo.', 'success');
+        setTimeout(() => {
+          copyBtn.innerHTML = '<i class="fas fa-link"></i> Copiar URL';
+        }, 1300);
+      } else {
+        showToast('No se pudo copiar automaticamente. Intenta con Ctrl+C.', 'error');
+      }
+    });
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && modal.classList.contains('active')) {
+      closeModal();
+    }
+  });
 }
 
 function renderStateBadge(state) {
@@ -1935,6 +2177,58 @@ function showAzureLoadingModal(message = 'Obteniendo tareas...') {
   document.body.style.overflow = 'hidden';
 }
 
+function setAzureLoadingProgress(percent, options = {}) {
+  const safePercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  const {
+    summaryMessage = '',
+    modalStatus = '',
+    modalDetail = '',
+    active = true
+  } = options;
+
+  if (DOM.azureSummaryProgress) {
+    DOM.azureSummaryProgress.classList.toggle('active', Boolean(active));
+  }
+
+  if (DOM.azureSummaryProgressFill) {
+    DOM.azureSummaryProgressFill.style.width = `${safePercent}%`;
+  }
+
+  if (DOM.azureSummaryProgressPercent) {
+    DOM.azureSummaryProgressPercent.textContent = `${safePercent}%`;
+  }
+
+  if (DOM.azureLoadingProgressFill) {
+    DOM.azureLoadingProgressFill.style.width = `${safePercent}%`;
+  }
+
+  if (DOM.azureLoadingPercent) {
+    DOM.azureLoadingPercent.textContent = `${safePercent}%`;
+  }
+
+  if (DOM.azureTasksSummaryText && summaryMessage) {
+    DOM.azureTasksSummaryText.textContent = summaryMessage;
+  }
+
+  if (DOM.azureLoadingStatus && modalStatus) {
+    DOM.azureLoadingStatus.textContent = modalStatus;
+  }
+
+  if (DOM.azureLoadingText && modalDetail) {
+    DOM.azureLoadingText.textContent = modalDetail;
+  }
+}
+
+function getAzurePayloadStagePercent(rowCount) {
+  const safeRows = Math.max(0, Number(rowCount) || 0);
+
+  if (safeRows <= 200) return 78;
+  if (safeRows <= 800) return 84;
+  if (safeRows <= 2000) return 88;
+  if (safeRows <= 5000) return 92;
+  return 94;
+}
+
 function hideAzureLoadingModal() {
   DOM.azureLoadingBackdrop.style.display = 'none';
   DOM.azureLoadingModal.style.display = 'none';
@@ -1958,7 +2252,7 @@ function normalizeAzureProjectName(projectName) {
   return value;
 }
 
-async function callAzureBackend(payload, timeoutMs = 15000) {
+async function callAzureBackend(payload, timeoutMs = 65000) {
   const endpoints = getAzureBackendCandidates();
   let lastError = null;
 
@@ -1999,7 +2293,7 @@ async function callAzureBackend(payload, timeoutMs = 15000) {
 
 async function checkServerPatStatus() {
   try {
-    const response = await callAzureBackend({ action: 'status' });
+    const response = await callAzureBackend({ action: 'status' }, 15000);
     const suffix = response.backendVersion
       ? ` (v${response.backendVersion})`
       : '';
@@ -2022,13 +2316,24 @@ async function fetchAzureWorkItems() {
   }
 
   showAzureLoadingModal('Obteniendo tareas de Azure DevOps...');
+  setAzureLoadingProgress(20, {
+    active: true,
+    summaryMessage: 'Conectando con Azure DevOps... (20%)',
+    modalStatus: 'Conectando con Azure DevOps...',
+    modalDetail: 'Validando acceso y preparando consulta.'
+  });
   showAzureSkeleton();
 
   try {
     const projectName = normalizeAzureProjectName(AzureConfig.project);
     const pat = DOM.azurePatInput ? DOM.azurePatInput.value.trim() : '';
 
-    DOM.azureLoadingStatus.textContent = 'Consultando backend de Azure...';
+    setAzureLoadingProgress(60, {
+      active: true,
+      summaryMessage: 'Consultando tareas en Azure... (60%)',
+      modalStatus: 'Consultando backend de Azure...',
+      modalDetail: 'Extrayendo items del proyecto y consolidando respuesta.'
+    });
 
     const payload = await callAzureBackend({
       org: AzureConfig.orgUrl.replace('https://dev.azure.com/', '').trim(),
@@ -2045,21 +2350,53 @@ async function fetchAzureWorkItems() {
     }
 
     if (!Array.isArray(payload.rows) || payload.rows.length === 0) {
+      setAzureLoadingProgress(100, {
+        active: false,
+        summaryMessage: `${AzureConfig.project} — sin tareas disponibles`,
+        modalStatus: 'Completado',
+        modalDetail: 'No se encontraron tareas para el proyecto.'
+      });
       hideAzureLoadingModal();
       showToast('No se encontraron tareas en el proyecto.', 'info');
       return;
     }
 
-    DOM.azureLoadingStatus.textContent = `Procesando ${payload.rows.length} tareas...`;
+    const payloadStagePercent = getAzurePayloadStagePercent(payload.rows.length);
+    setAzureLoadingProgress(payloadStagePercent, {
+      active: true,
+      summaryMessage: `Payload recibido: ${payload.rows.length} tareas (${payloadStagePercent}%)`,
+      modalStatus: `Payload recibido: ${payload.rows.length} tareas`,
+      modalDetail: 'Calculando estructura de datos según el tamaño de la carga.'
+    });
 
     if (payload.limitApplied) {
       showToast(`Se cargaron ${payload.rows.length} tareas recientes (límite aplicado: ${payload.limitApplied}).`, 'info');
     }
 
+    await processAzureData(payload.rows, () => {
+      setAzureLoadingProgress(95, {
+        active: true,
+        summaryMessage: `Renderizando tabla... (95%)`,
+        modalStatus: 'Renderizando tabla final...',
+        modalDetail: 'Construyendo encabezados y filas para mostrar resultados.'
+      });
+    });
+
+    setAzureLoadingProgress(100, {
+      active: false,
+      summaryMessage: `${AzureConfig.project} — ${payload.rows.length} tarea${payload.rows.length !== 1 ? 's' : ''}`,
+      modalStatus: 'Completado',
+      modalDetail: 'Carga finalizada correctamente.'
+    });
     hideAzureLoadingModal();
-    processAzureData(payload.rows);
 
   } catch (error) {
+    setAzureLoadingProgress(0, {
+      active: false,
+      summaryMessage: 'No se pudieron cargar tareas de Azure.',
+      modalStatus: 'Error durante la carga',
+      modalDetail: 'Revisa credenciales, conectividad o estado del backend.'
+    });
     hideAzureLoadingModal();
 
     const backendHint = DOM.azurePatServerStatus && DOM.azurePatServerStatus.textContent.includes('(v')
@@ -2102,7 +2439,7 @@ function convertAzureWorkItemsToRows(workItems) {
   return rows;
 }
 
-function processAzureData(rows) {
+async function processAzureData(rows, onBeforeRender = null) {
   if (!rows || rows.length === 0) {
     showToast('No hay datos para procesar.', 'info');
     return;
@@ -2113,7 +2450,7 @@ function processAzureData(rows) {
   AzureState.rows = rows;
 
   // Show the dedicated Azure panel
-  renderAzurePanel(rows);
+  await renderAzurePanel(rows, onBeforeRender);
   showToast(`✓ ${rows.length} tareas cargadas desde Azure DevOps`, 'success');
 }
 
@@ -2197,22 +2534,30 @@ function hideAzureSkeleton() {
   if (DOM.azureSkeleton) DOM.azureSkeleton.style.display = 'none';
 }
 
-function renderAzurePanel(rows) {
-  if (!DOM.azureTasksSection) return;
+function renderAzurePanel(rows, onBeforeRender = null) {
+  if (!DOM.azureTasksSection) return Promise.resolve();
 
-  // Show section + skeleton briefly for effect
-  showAzureSkeleton();
+  return new Promise(resolve => {
+    // Show section + skeleton briefly for effect
+    showAzureSkeleton();
 
-  // Populate the state dropdown with unique states from data
-  populateStateFilter(rows);
+    // Populate the state dropdown with unique states from data
+    populateStateFilter(rows);
+    populateTypeFilter(rows);
 
-  // Small delay to show skeleton shimmer before rendering table
-  setTimeout(() => {
-    hideAzureSkeleton();
-    renderAzureTable(rows);
-    DOM.azureTasksSection.style.display = '';
-    updateAzureConnectedStrip();
-  }, 600);
+    // Small delay to show skeleton shimmer before rendering table
+    setTimeout(() => {
+      if (typeof onBeforeRender === 'function') {
+        onBeforeRender();
+      }
+
+      hideAzureSkeleton();
+      renderAzureTable(rows);
+      DOM.azureTasksSection.style.display = '';
+      updateAzureConnectedStrip();
+      resolve();
+    }, 600);
+  });
 }
 
 function populateStateFilter(rows) {
@@ -2220,14 +2565,42 @@ function populateStateFilter(rows) {
   const currentVal = DOM.azureFilterState.value;
   const states = [...new Set(rows.map(r => String(r['Estado'] || r['State'] || '').trim()).filter(Boolean))].sort();
 
-  DOM.azureFilterState.innerHTML = '<option value="">Todos los estados</option>';
+  DOM.azureFilterState.innerHTML = [
+    '<option value="">Todos los estados</option>',
+    '<option value="bucket:new">New</option>',
+    '<option value="bucket:developing">Developing</option>',
+    '<option value="bucket:done">Done</option>',
+    '<option value="bucket:resolved">Resolved</option>'
+  ].join('');
+
   states.forEach(s => {
     const opt = document.createElement('option');
-    opt.value = s;
+    opt.value = `exact:${s.toLowerCase()}`;
     opt.textContent = s;
-    if (s === currentVal) opt.selected = true;
     DOM.azureFilterState.appendChild(opt);
   });
+
+  if (currentVal && Array.from(DOM.azureFilterState.options).some(o => o.value === currentVal)) {
+    DOM.azureFilterState.value = currentVal;
+  }
+}
+
+function populateTypeFilter(rows) {
+  if (!DOM.azureFilterType) return;
+  const currentVal = DOM.azureFilterType.value;
+  const types = [...new Set(rows.map(r => String(r['Tipo'] || r['Type'] || '').trim()).filter(Boolean))].sort();
+
+  DOM.azureFilterType.innerHTML = '<option value="">Todos los tipos</option>';
+  types.forEach(type => {
+    const opt = document.createElement('option');
+    opt.value = type.toLowerCase();
+    opt.textContent = type;
+    DOM.azureFilterType.appendChild(opt);
+  });
+
+  if (currentVal && Array.from(DOM.azureFilterType.options).some(o => o.value === currentVal)) {
+    DOM.azureFilterType.value = currentVal;
+  }
 }
 
 function renderAzureTable(rows) {
@@ -2262,22 +2635,86 @@ function renderAzureTable(rows) {
 function applyAzureFilters() {
   const userQuery = (DOM.azureFilterUser.value || '').trim().toLowerCase();
   const stateQuery = (DOM.azureFilterState.value || '').trim().toLowerCase();
+  const typeQuery = (DOM.azureFilterType && DOM.azureFilterType.value ? DOM.azureFilterType.value : '').trim().toLowerCase();
+  const fromDate = (DOM.azureFilterDateFrom && DOM.azureFilterDateFrom.value ? DOM.azureFilterDateFrom.value : '').trim();
+  const toDate = (DOM.azureFilterDateTo && DOM.azureFilterDateTo.value ? DOM.azureFilterDateTo.value : '').trim();
 
   const filtered = AzureState.rows.filter(row => {
     const assignedTo = String(row['Asignado a'] || row['Assigned To'] || row['assignedTo'] || '').toLowerCase();
+    const assignedEmail = String(row['Asignado correo'] || row['Assigned To Email'] || row['assignedEmail'] || '').toLowerCase();
     const state      = String(row['Estado']    || row['State']       || row['state']      || '').toLowerCase();
+    const type       = String(row['Tipo'] || row['Type'] || '').toLowerCase();
+    const rowDate = getRowDateForFiltering(row);
 
-    const userMatch  = !userQuery  || assignedTo.includes(userQuery);
-    const stateMatch = !stateQuery || state === stateQuery;
-    return userMatch && stateMatch;
+    const userMatch  = !userQuery || assignedTo.includes(userQuery) || assignedEmail.includes(userQuery);
+    const stateMatch = matchesStateFilter(stateQuery, state);
+    const typeMatch = !typeQuery || type === typeQuery;
+    const fromMatch = !fromDate || (rowDate !== null && rowDate >= fromDate);
+    const toMatch = !toDate || (rowDate !== null && rowDate <= toDate);
+
+    return userMatch && stateMatch && typeMatch && fromMatch && toMatch;
   });
 
   renderAzureTable(filtered);
 }
 
+function getRowDateForFiltering(row) {
+  const candidates = [
+    row['Actualizado'],
+    row['Changed Date'],
+    row['ChangedDate'],
+    row['Creado'],
+    row['Created Date'],
+    row['CreatedDate'],
+    row['Fecha'],
+    row['Date']
+  ];
+
+  for (const value of candidates) {
+    const parsed = parseDateLike(value);
+    if (parsed && parsed.key) {
+      return parsed.key;
+    }
+  }
+
+  return null;
+}
+
+function matchesStateFilter(filterValue, stateValue) {
+  if (!filterValue) return true;
+
+  const normalizedState = String(stateValue || '').trim().toLowerCase();
+  if (!normalizedState) return false;
+
+  if (filterValue.startsWith('exact:')) {
+    return normalizedState === filterValue.replace('exact:', '');
+  }
+
+  if (filterValue === 'bucket:done') {
+    return ['done', 'closed', 'completed', 'completado', 'cerrado', 'terminado'].includes(normalizedState);
+  }
+
+  if (filterValue === 'bucket:developing') {
+    return ['active', 'in progress', 'en curso', 'en progreso', 'activo', 'developing', 'development'].includes(normalizedState);
+  }
+
+  if (filterValue === 'bucket:new') {
+    return ['new', 'to do', 'nuevo', 'a hacer', 'pendiente'].includes(normalizedState);
+  }
+
+  if (filterValue === 'bucket:resolved') {
+    return ['resolved', 'resuelto'].includes(normalizedState);
+  }
+
+  return normalizedState === filterValue;
+}
+
 function resetAzureFilters() {
   if (DOM.azureFilterUser)  DOM.azureFilterUser.value  = '';
   if (DOM.azureFilterState) DOM.azureFilterState.value = '';
+  if (DOM.azureFilterType) DOM.azureFilterType.value = '';
+  if (DOM.azureFilterDateFrom) DOM.azureFilterDateFrom.value = '';
+  if (DOM.azureFilterDateTo) DOM.azureFilterDateTo.value = '';
   renderAzureTable(AzureState.rows);
   // Update count badge
   if (DOM.azureResultsCount) {

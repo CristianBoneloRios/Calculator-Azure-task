@@ -1,0 +1,127 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Azure Task Suite Copilot Agent API",
+    "version": "1.0.0",
+    "description": "API para conectar un agente de Copilot 365 (Copilot Studio) y consultar validaciones/datos del sistema."
+  },
+  "servers": [
+    {
+      "url": "https://YOUR-DOMAIN.com/api"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "paths": {
+    "/copilot_agent.php": {
+      "post": {
+        "operationId": "copilotAgentAction",
+        "summary": "Ejecutar accion del agente",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Respuesta de accion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key invalida"
+          },
+          "422": {
+            "description": "Error de validacion"
+          },
+          "500": {
+            "description": "Error interno"
+          }
+        }
+      },
+      "get": {
+        "operationId": "copilotAgentCapabilities",
+        "summary": "Obtener capacidades",
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "capabilities"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Capacidades del endpoint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    },
+    "schemas": {
+      "AgentRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "capabilities | validate_system | get_user_snapshot | search_user_content"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          },
+          "query": {
+            "type": "string"
+          },
+          "entity": {
+            "type": "string",
+            "description": "all | tasks | goals | notes | events",
+            "default": "all"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    }
+  }
+}

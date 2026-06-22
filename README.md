@@ -1,3 +1,16 @@
+# Base de Datos Completa y Detallada
+
+Este documento contiene el esquema SQL completo consolidado del sistema.
+
+## Motor y codificacion recomendada
+
+- Motor: InnoDB
+- Charset: utf8mb4
+- Collation: utf8mb4_unicode_ci
+
+## Script SQL completo
+
+```sql
 -- =============================================================
 -- Schema completo — u400335795_AzureDevOPs
 -- Todas las tablas con CREATE TABLE IF NOT EXISTS
@@ -40,7 +53,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------
--- 2FA: códigos de recuperación
+-- 2FA: codigos de recuperacion
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS two_factor_recovery_codes (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -55,7 +68,7 @@ CREATE TABLE IF NOT EXISTS two_factor_recovery_codes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------
--- Perfil público
+-- Perfil publico
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public_profiles (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -104,46 +117,6 @@ CREATE TABLE IF NOT EXISTS notes (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY fk_notes_user (user_id),
     CONSTRAINT fk_notes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- -------------------------------------------------------------
--- Comentarios jerarquicos de notas
--- -------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS note_comments (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    note_id INT UNSIGNED NOT NULL,
-    user_id INT UNSIGNED NOT NULL,
-    parent_comment_id BIGINT UNSIGNED DEFAULT NULL,
-    content TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    KEY idx_note_comments_note (note_id),
-    KEY idx_note_comments_user (user_id),
-    KEY idx_note_comments_parent (parent_comment_id),
-    CONSTRAINT fk_note_comments_note FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
-    CONSTRAINT fk_note_comments_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_note_comments_parent FOREIGN KEY (parent_comment_id) REFERENCES note_comments(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- -------------------------------------------------------------
--- Invitaciones por correo para compartir notas
--- -------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS note_shares (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    note_id INT UNSIGNED NOT NULL,
-    owner_user_id INT UNSIGNED NOT NULL,
-    invited_email VARCHAR(190) NOT NULL,
-    invited_user_id INT UNSIGNED DEFAULT NULL,
-    is_active TINYINT(1) NOT NULL DEFAULT 1,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uniq_note_share_email (note_id, invited_email),
-    KEY idx_note_shares_note (note_id),
-    KEY idx_note_shares_owner (owner_user_id),
-    KEY idx_note_shares_invited_user (invited_user_id),
-    CONSTRAINT fk_note_shares_note FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
-    CONSTRAINT fk_note_shares_owner FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_note_shares_invited_user FOREIGN KEY (invited_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------
@@ -242,7 +215,7 @@ CREATE TABLE IF NOT EXISTS integrations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------
--- Configuración de Power Automate (token entrante + webhook saliente)
+-- Configuracion de Power Automate (token entrante + webhook saliente)
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS power_automate_config (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -261,7 +234,7 @@ CREATE TABLE IF NOT EXISTS power_automate_config (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------
--- Logs de sincronización Power Automate
+-- Logs de sincronizacion Power Automate
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS power_automate_logs (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -280,7 +253,7 @@ CREATE TABLE IF NOT EXISTS power_automate_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------
--- Jobs de generación de documentos (manual, guia, informe)
+-- Jobs de generacion de documentos (manual, guia, informe)
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS document_generation_jobs (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -331,7 +304,7 @@ CREATE TABLE IF NOT EXISTS user_document_security (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -------------------------------------------------------------
--- Configuración general de la aplicación (clave-valor)
+-- Configuracion general de la aplicacion (clave-valor)
 -- -------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS app_settings (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -339,20 +312,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
     setting_value TEXT DEFAULT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
 
--- -------------------------------------------------------------
--- Perfil de identidad del desarrollador (separado del usuario)
--- -------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS developer_identity_profile (
-    id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
-    display_name VARCHAR(150) NOT NULL,
-    role_label VARCHAR(150) NOT NULL,
-    photo_path VARCHAR(255) DEFAULT NULL,
-    owner_user_id INT UNSIGNED NOT NULL,
-    owner_email VARCHAR(190) NOT NULL,
-    updated_by_user_id INT UNSIGNED DEFAULT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_dev_identity_owner FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT,
-    CONSTRAINT fk_dev_identity_updated_by FOREIGN KEY (updated_by_user_id) REFERENCES users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+## Verificacion rapida
+
+```sql
+SHOW TABLES;
+```
+
+```sql
+SELECT COUNT(*) AS total_tablas
+FROM information_schema.tables
+WHERE table_schema = DATABASE();
+```

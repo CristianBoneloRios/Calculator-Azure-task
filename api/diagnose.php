@@ -77,6 +77,7 @@ foreach ($extensions as $ext) {
 
 // 7. Try to connect to DB
 $diagnostics['db_connection'] = ['status' => 'not_attempted'];
+$diagnostics['db_schema_2fa'] = ['status' => 'not_checked'];
 try {
     if ($envPath && file_exists($envPath)) {
         // Parse .env manually
@@ -113,6 +114,35 @@ try {
                 'database' => $database,
                 'version' => $pdo->getAttribute(PDO::ATTR_SERVER_VERSION),
             ];
+
+            $required2fa = [
+                'users' => ['two_factor_secret', 'two_factor_enabled'],
+            ];
+
+            $missing = [];
+            foreach ($required2fa as $table => $columns) {
+                foreach ($columns as $column) {
+                    $stmt = $pdo->prepare(
+                        'SELECT COUNT(*) FROM information_schema.columns
+                         WHERE table_schema = DATABASE()
+                           AND table_name = :table_name
+                           AND column_name = :column_name'
+                    );
+                    $stmt->execute([
+                        'table_name' => $table,
+                        'column_name' => $column,
+                    ]);
+
+                    if ((int) $stmt->fetchColumn() === 0) {
+                        $missing[] = $table . '.' . $column;
+                    }
+                }
+            }
+
+            $diagnostics['db_schema_2fa'] = [
+                'status' => empty($missing) ? 'ok' : 'missing_columns',
+                'missing' => $missing,
+            ];
         } catch (PDOException $e) {
             $diagnostics['db_connection'] = [
                 'status' => 'failed',
@@ -121,10 +151,15 @@ try {
                 'database' => $database,
                 'username' => $username,
             ];
+            $diagnostics['db_schema_2fa'] = ['status' => 'skipped_connection_failed'];
         }
     }
 } catch (Throwable $e) {
     $diagnostics['db_connection'] = [
+        'status' => 'error',
+        'error' => $e->getMessage(),
+    ];
+    $diagnostics['db_schema_2fa'] = [
         'status' => 'error',
         'error' => $e->getMessage(),
     ];

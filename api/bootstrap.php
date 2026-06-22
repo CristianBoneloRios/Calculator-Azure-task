@@ -119,7 +119,19 @@ function applicationErrorMessage(Throwable $throwable): string
 {
     $message = $throwable->getMessage();
 
-    if (stripos($message, 'base de datos') !== false || stripos($message, 'db_') !== false || stripos($message, 'pdo') !== false) {
+    $looksLikeDatabaseError =
+        stripos($message, 'base de datos') !== false ||
+        stripos($message, 'db_') !== false ||
+        stripos($message, 'pdo') !== false ||
+        stripos($message, 'sqlstate') !== false ||
+        stripos($message, 'mysql') !== false ||
+        stripos($message, 'unknown column') !== false ||
+        stripos($message, 'table') !== false ||
+        stripos($message, 'column') !== false ||
+        stripos($message, 'foreign key') !== false ||
+        stripos($message, 'information_schema') !== false;
+
+    if ($looksLikeDatabaseError) {
         return 'No se pudo inicializar la aplicacion porque la conexion a la base de datos no esta lista. En Hostinger verifica que subiste el archivo .env, que DB_HOST sea el hostname real de MySQL y que PDO MySQL este habilitado.';
     }
 

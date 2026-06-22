@@ -4,16 +4,6 @@ declare(strict_types=1);
 
 $bootstrapError = null;
 
-function loginEnvFallback(string $key, string $default): string
-{
-    $value = getenv($key);
-    if ($value === false || $value === null || trim((string) $value) === '') {
-        return $default;
-    }
-
-    return (string) $value;
-}
-
 try {
   require_once __DIR__ . '/../api/app.php';
   ensureApplicationInstalled();
@@ -79,11 +69,19 @@ try {
           <li><i class="fas fa-bullseye"></i> Seguimiento de metas</li>
           <li><i class="fas fa-note-sticky"></i> Notas importantes</li>
         </ul>
+
+        <div class="login-footer-animation">
+          <div class="login-icon-circle-footer">
+            <i class="fas fa-lock"></i>
+          </div>
+          <div class="login-ripple-footer"></div>
+          <div class="login-ripple-footer delay-1"></div>
+        </div>
       </div>
 
       <div class="auth-form-panel">
         <h2>Bienvenido de nuevo</h2>
-        <p class="auth-muted">Ingresa con tu correo y contrasena.</p>
+        <p class="auth-muted">Ingresa con tu correo y contraseña.</p>
 
         <?php if ($bootstrapError !== null): ?>
           <div class="auth-alert" role="alert">
@@ -95,11 +93,20 @@ try {
         <form id="loginForm" class="auth-form">
           <div>
             <label for="loginEmail">Correo</label>
-            <input type="email" id="loginEmail" value="<?php echo htmlspecialchars(function_exists('env') ? (string) env('APP_DEFAULT_ADMIN_EMAIL', 'admin@azuretask.local') : loginEnvFallback('APP_DEFAULT_ADMIN_EMAIL', 'admin@azuretask.local'), ENT_QUOTES, 'UTF-8'); ?>" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?> required>
+            <input type="email" id="loginEmail" value="<?php echo htmlspecialchars((string) ($_GET['email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" autocomplete="username" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?> required>
           </div>
           <div>
             <label for="loginPassword">Contrasena</label>
-            <input type="password" id="loginPassword" placeholder="Ingresa tu contrasena" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?> required>
+            <div class="auth-password-control">
+              <input type="password" id="loginPassword" placeholder="Ingresa tu contrasena" autocomplete="current-password" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?> required>
+              <div class="norm-toggle-group auth-password-toggle">
+                <label class="norm-toggle">
+                  <input type="checkbox" id="loginShowPassword" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?>>
+                  <span class="norm-toggle-slider"></span>
+                </label>
+                <span>Mostrar contrasena</span>
+              </div>
+            </div>
           </div>
           <div class="auth-actions">
             <button type="submit" class="btn btn-primary" <?php echo $bootstrapError !== null ? 'disabled' : ''; ?>><i class="fas fa-right-to-bracket"></i> Entrar</button>
@@ -118,7 +125,9 @@ try {
   <footer class="app-footer">
     <div class="footer-content">
       <div class="footer-section footer-primary">
-        <div class="footer-left"><i class="fas fa-code"></i></div>
+        <div class="footer-left">
+          <i class="fas fa-code"></i>
+        </div>
         <div class="footer-center">
           <span class="footer-powered">Powered by</span>
           <span class="footer-name">Cristian Jesus Bonelo Rios</span>
@@ -127,13 +136,75 @@ try {
           <span class="footer-sep">|</span>
           <span class="footer-dept">DEVELOPMENT &amp; INNOVATION</span>
         </div>
-        <div class="footer-right"><span class="footer-version">Workspace</span></div>
+        <div class="footer-right">
+          <span class="footer-version">v1.0.0</span>
+        </div>
+      </div>
+
+      <div class="footer-section footer-socials">
+        <span class="footer-section-title"><i class="fas fa-share-alt"></i> Redes Sociales</span>
+        <div class="footer-social-links">
+          <a href="https://cristiandevbonelo.github.io/porfoliocristian/" target="_blank" rel="noopener noreferrer" aria-label="Portafolio">
+            <i class="fas fa-globe"></i>
+            <span>Portafolio</span>
+          </a>
+          <a href="#" aria-label="LinkedIn pendiente">
+            <i class="fab fa-linkedin"></i>
+            <span>LinkedIn (pendiente)</span>
+          </a>
+          <a href="https://github.com/CristianBoneloRios" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+            <i class="fab fa-github"></i>
+            <span>GitHub</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="footer-section footer-photo-block">
+        <div class="footer-photo-wrap" id="footerPhotoWrap">
+          <img class="footer-photo-thumb" src="https://cristiandevbonelo.github.io/porfoliocristian/assets/1755273365367.jpg" alt="Foto de Cristian Bonelo" loading="lazy" />
+        </div>
       </div>
     </div>
   </footer>
 
+  <div class="photo-hover-backdrop" id="footerPhotoPreviewBackdrop" aria-hidden="true">
+    <img class="photo-hover-preview" id="footerPhotoPreviewImg" src="https://cristiandevbonelo.github.io/porfoliocristian/assets/1755273365367.jpg" alt="Vista ampliada de foto" loading="lazy" />
+  </div>
+
   <script>
-    document.getElementById('loginForm').addEventListener('submit', async event => {
+    const loginForm = document.getElementById('loginForm');
+    const loginEmail = document.getElementById('loginEmail');
+    const loginPassword = document.getElementById('loginPassword');
+    const loginShowPassword = document.getElementById('loginShowPassword');
+    const footerPhotoWrap = document.getElementById('footerPhotoWrap');
+    const footerPhotoPreviewBackdrop = document.getElementById('footerPhotoPreviewBackdrop');
+
+    loginShowPassword?.addEventListener('change', () => {
+      loginPassword.type = loginShowPassword.checked ? 'text' : 'password';
+    });
+
+    if (footerPhotoWrap && footerPhotoPreviewBackdrop && window.matchMedia && window.matchMedia('(hover: hover)').matches) {
+      let hideTimer = null;
+
+      const showPreview = () => {
+        if (hideTimer) {
+          clearTimeout(hideTimer);
+          hideTimer = null;
+        }
+        footerPhotoPreviewBackdrop.classList.add('active');
+      };
+
+      const hidePreview = () => {
+        hideTimer = window.setTimeout(() => {
+          footerPhotoPreviewBackdrop.classList.remove('active');
+        }, 40);
+      };
+
+      footerPhotoWrap.addEventListener('mouseenter', showPreview);
+      footerPhotoWrap.addEventListener('mouseleave', hidePreview);
+    }
+
+    loginForm.addEventListener('submit', async event => {
       event.preventDefault();
 
       if (<?php echo $bootstrapError !== null ? 'true' : 'false'; ?>) {
@@ -146,8 +217,8 @@ try {
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: document.getElementById('loginEmail').value,
-            password: document.getElementById('loginPassword').value
+            email: loginEmail.value.trim(),
+            password: loginPassword.value
           })
         });
 

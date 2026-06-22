@@ -88,11 +88,11 @@
 
           <div class="nav-section">
             <span class="nav-section-label">Acerca de</span>
-            <a class="about-me-btn" href="workspace/login.php" title="Iniciar sesion en Workspace">
+            <a class="about-me-btn" id="workspaceLoginBtn" href="workspace/login.php" title="Iniciar sesion en Workspace">
               <i class="fas fa-right-to-bracket" style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--accent-green);"></i>
               <div class="about-me-btn-info">
-                <span class="about-me-btn-name">Iniciar sesión</span>
-                <span class="about-me-btn-role">Acceder al Workspace</span>
+                <span class="about-me-btn-name" id="workspaceLoginBtnName">Iniciar sesión</span>
+                <span class="about-me-btn-role" id="workspaceLoginBtnRole">Acceder al Workspace</span>
               </div>
               <i class="fas fa-arrow-right about-me-btn-arrow"></i>
             </a>
@@ -177,23 +177,18 @@
 
       <div class="about-modal-bio">
         <p>
-          Soy <strong>Software Quality Analyst</strong> en <strong>Olimpia IT</strong>, con un fuerte enfoque en
-          desarrollo e innovación, especializado en la mejora continua y optimización de procesos de software.
-          Cuento con experiencia en la implementación de herramientas de <strong>inteligencia artificial</strong>
-          para automatizar, analizar y fortalecer los procesos de aseguramiento de la calidad, contribuyendo a
-          productos más eficientes, confiables y alineados con los objetivos del negocio.
+          Soy Software Quality Analyst en Olimpia IT, enfocado en la mejora continua y la optimización de procesos
+          de software. Tengo experiencia en la implementación de herramientas de inteligencia artificial para
+          automatizar y fortalecer el aseguramiento de la calidad, impulsando productos más eficientes y confiables.
         </p>
         <p>
-          Me destaco por el uso de herramientas de gestión de proyectos como <strong>Azure DevOps</strong>, las cuales
-          me permiten planificar, supervisar y optimizar el ciclo de vida del desarrollo de software, garantizando
-          trazabilidad, control de calidad y mejora constante. Mi enfoque analítico y orientado a resultados facilita
-          la identificación de oportunidades de optimización, la reducción de riesgos y la adopción de buenas
-          prácticas dentro de los equipos de trabajo.
+          Me destaco en el uso de Azure DevOps para gestionar y optimizar el ciclo de desarrollo, garantizando
+          trazabilidad y control de calidad. Mi enfoque analítico me permite identificar oportunidades de mejora,
+          reducir riesgos y promover buenas prácticas en los equipos.
         </p>
         <p>
-          Estoy comprometido con la <strong>excelencia técnica</strong>, la <strong>innovación continua</strong> y la
-          entrega de soluciones de alto valor, aportando activamente a la transformación digital y al fortalecimiento
-          de los procesos organizacionales en Olimpia IT.
+          Estoy comprometido con la excelencia técnica, la innovación y la entrega de soluciones de alto valor que
+          aporten a la transformación digital de la organización.
         </p>
 
         <div class="about-modal-publish-box">
@@ -272,6 +267,12 @@
           <div class="section-title-group">
             <h2><i class="fab fa-microsoft"></i> Tareas de Azure DevOps</h2>
             <p id="azureTasksSummaryText">Cargando tareas...</p>
+            <div class="azure-summary-progress-wrap">
+              <div class="azure-summary-progress" id="azureSummaryProgress" aria-hidden="true">
+                <div class="azure-summary-progress-fill" id="azureSummaryProgressFill"></div>
+              </div>
+              <span class="azure-summary-progress-percent" id="azureSummaryProgressPercent">0%</span>
+            </div>
           </div>
           <div class="section-actions">
             <button class="btn btn-azure btn-sm" id="azureReloadBtn">
@@ -291,6 +292,20 @@
             <select id="azureFilterState">
               <option value="">Todos los estados</option>
             </select>
+          </div>
+          <div class="azure-filter-group">
+            <label for="azureFilterType"><i class="fas fa-layer-group"></i> Tipo</label>
+            <select id="azureFilterType">
+              <option value="">Todos los tipos</option>
+            </select>
+          </div>
+          <div class="azure-filter-group azure-filter-group-date">
+            <label for="azureFilterDateFrom"><i class="fas fa-calendar-day"></i> Desde</label>
+            <input type="date" id="azureFilterDateFrom" />
+          </div>
+          <div class="azure-filter-group azure-filter-group-date">
+            <label for="azureFilterDateTo"><i class="fas fa-calendar-check"></i> Hasta</label>
+            <input type="date" id="azureFilterDateTo" />
           </div>
           <div class="azure-filter-actions">
             <button class="btn btn-primary btn-sm" id="azureApplyFilterBtn">
@@ -637,9 +652,10 @@
       </div>
     </div>
     <div class="system-modal-body" style="text-align: center;">
-      <div class="loading-progress-bar">
-        <div class="loading-progress-fill"></div>
+      <div class="loading-progress-bar azure-loading-progress-bar">
+        <div class="loading-progress-fill azure-loading-progress-fill" id="azureLoadingProgressFill"></div>
       </div>
+      <div class="azure-loading-progress-percent" id="azureLoadingPercent">0%</div>
       <p style="margin-top: 10px; color: var(--text-2);" id="azureLoadingText">Esto puede tomar un momento...</p>
     </div>
   </div>

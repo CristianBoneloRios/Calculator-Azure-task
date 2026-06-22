@@ -56,6 +56,59 @@ try {
         ]);
     }
 
+    if ($action === '2fa-verify') {
+        $pdo = db();
+        ensureTwoFactorSchemaReady($pdo);
+
+        $code = trim((string) ($input['code'] ?? ''));
+        $pendingUserId = (int) ($_SESSION['_2fa_user_id'] ?? 0);
+        $pendingSecret = (string) ($_SESSION['_2fa_secret'] ?? '');
+
+        if ($pendingUserId <= 0 || $pendingSecret === '') {
+            jsonResponse([
+                'ok' => false,
+                'message' => 'No hay una verificacion 2FA pendiente.'
+            ], 422);
+        }
+
+        $isTotpValid = verifyTwoFactorCode($pendingSecret, $code);
+        $usedRecoveryCode = false;
+
+        if (!$isTotpValid) {
+            $usedRecoveryCode = consumeTwoFactorRecoveryCode($pdo, $pendingUserId, $code);
+        }
+
+        if (!$isTotpValid && !$usedRecoveryCode) {
+            jsonResponse([
+                'ok' => false,
+                'message' => 'Codigo 2FA invalido.'
+            ], 422);
+        }
+
+        $stmt = db()->prepare('SELECT * FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $pendingUserId]);
+        $userToAuthenticate = $stmt->fetch();
+
+        if (!$userToAuthenticate) {
+            jsonResponse([
+                'ok' => false,
+                'message' => 'Usuario no encontrado para completar autenticacion.'
+            ], 404);
+        }
+
+        unset($_SESSION['_2fa_user_id'], $_SESSION['_2fa_secret']);
+        $authenticatedUser = startAuthenticatedSession($userToAuthenticate);
+
+        jsonResponse([
+            'ok' => true,
+            'authenticated' => true,
+            'user' => $authenticatedUser,
+            'message' => $usedRecoveryCode
+                ? 'Codigo de recuperacion validado correctamente.'
+                : 'Codigo 2FA validado correctamente.'
+        ]);
+    }
+
     if ($action !== 'login' && $action !== 'register') {
         jsonResponse([
             'ok' => false,
@@ -118,6 +171,8 @@ try {
             'message' => 'Credenciales invalidas.'
         ], 401);
     }
+
+    ensureTwoFactorSchemaReady(db());
 
     // Verificar si el usuario tiene 2FA habilitado
     if ($user['two_factor_enabled'] && !empty($user['two_factor_secret'])) {

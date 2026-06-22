@@ -172,9 +172,11 @@ foreach ($chunks as $chunk) {
 $rows = array_map(static function (array $wi): array {
     $fields = is_array($wi['fields'] ?? null) ? $wi['fields'] : [];
     $assignedTo = $fields['System.AssignedTo'] ?? '';
+    $assignedEmail = '';
 
     if (is_array($assignedTo)) {
-        $assignedTo = (string) ($assignedTo['displayName'] ?? $assignedTo['uniqueName'] ?? '');
+        $assignedEmail = (string) ($assignedTo['uniqueName'] ?? $assignedTo['mailAddress'] ?? '');
+        $assignedTo = (string) ($assignedTo['displayName'] ?? $assignedEmail ?? '');
     } else {
         $assignedTo = (string) $assignedTo;
     }
@@ -185,6 +187,9 @@ $rows = array_map(static function (array $wi): array {
         'Tipo' => (string) ($fields['System.WorkItemType'] ?? ''),
         'Estado' => (string) ($fields['System.State'] ?? ''),
         'Asignado a' => $assignedTo,
+        'Asignado correo' => $assignedEmail,
+        'Creado' => (string) ($fields['System.CreatedDate'] ?? ''),
+        'Actualizado' => (string) ($fields['System.ChangedDate'] ?? ''),
         'Estimacion Original' => (float) ($fields['Microsoft.VSTS.Scheduling.OriginalEstimate'] ?? 0),
         'Trabajo Completado' => (float) ($fields['Microsoft.VSTS.Scheduling.CompletedWork'] ?? 0),
         'Trabajo Restante' => (float) ($fields['Microsoft.VSTS.Scheduling.RemainingWork'] ?? 0),

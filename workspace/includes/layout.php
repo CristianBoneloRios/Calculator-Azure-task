@@ -7,6 +7,8 @@ require_once dirname(__DIR__, 2) . '/api/app.php';
 function workspaceLayoutStart(string $title, string $activePage, array $user): void
 {
     $photo = $user['profile_photo_path'] ? '../' . ltrim((string) $user['profile_photo_path'], '/') : null;
+  $developerProfile = getDeveloperIdentityProfile();
+  $developerPhoto = !empty($developerProfile['photo_path']) ? '../' . ltrim((string) $developerProfile['photo_path'], '/') : null;
     ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -20,6 +22,9 @@ function workspaceLayoutStart(string $title, string $activePage, array $user): v
   <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-bold-rounded/css/uicons-bold-rounded.css" />
   <link rel="stylesheet" href="../styles.css">
   <link rel="stylesheet" href="assets/workspace.css">
+  <?php if ($activePage === 'profile'): ?>
+    <link rel="stylesheet" href="assets/profile.css">
+  <?php endif; ?>
 </head>
 <body data-page="<?php echo htmlspecialchars($activePage, ENT_QUOTES, 'UTF-8'); ?>" class="workspace-page-body">
   <header class="app-header">
@@ -83,14 +88,15 @@ function workspaceLayoutStart(string $title, string $activePage, array $user): v
             <?php echo workspaceNavLink('Tareas del Dia', 'tasks.php', 'tasks', $activePage, 'fa-list-check'); ?>
             <?php echo workspaceNavLink('Metas', 'goals.php', 'goals', $activePage, 'fa-bullseye'); ?>
             <?php echo workspaceNavLink('Calendario', 'calendar.php', 'calendar', $activePage, 'fa-calendar-days'); ?>
+            <?php echo workspaceNavLink('Generacion documentos', 'generacion_documentos.php', 'generacion_documentos', $activePage, 'fa-file-lines'); ?>
           </div>
 
           <div class="nav-section">
             <span class="nav-section-label">Sesion</span>
             <div class="about-me-btn" style="cursor:default;margin-bottom:8px;">
-              <?php if ($photo): ?>
+              <?php if ($developerPhoto): ?>
                 <div class="about-me-btn-avatar">
-                  <img src="<?php echo htmlspecialchars($photo, ENT_QUOTES, 'UTF-8'); ?>" alt="Foto de perfil" />
+                  <img src="<?php echo htmlspecialchars($developerPhoto, ENT_QUOTES, 'UTF-8'); ?>" alt="Foto del desarrollador" />
                 </div>
               <?php else: ?>
                 <div class="about-me-btn-avatar">
@@ -98,8 +104,8 @@ function workspaceLayoutStart(string $title, string $activePage, array $user): v
                 </div>
               <?php endif; ?>
               <div class="about-me-btn-info">
-                <span class="about-me-btn-name"><?php echo htmlspecialchars($user['full_name'], ENT_QUOTES, 'UTF-8'); ?></span>
-                <span class="about-me-btn-role" style="color:var(--accent-green);">&#9679; Sesion activa</span>
+                <span class="about-me-btn-name"><?php echo htmlspecialchars((string) ($developerProfile['display_name'] ?? 'Desarrollador'), ENT_QUOTES, 'UTF-8'); ?></span>
+                <span class="about-me-btn-role" style="color:var(--accent-green);">&#9679; <?php echo htmlspecialchars((string) ($developerProfile['role_label'] ?? 'Developer'), ENT_QUOTES, 'UTF-8'); ?></span>
               </div>
             </div>
             <a class="nav-item" href="logout.php" style="color:var(--accent-red,#ef4444);">
