@@ -356,3 +356,57 @@ CREATE TABLE IF NOT EXISTS developer_identity_profile (
     CONSTRAINT fk_dev_identity_owner FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT,
     CONSTRAINT fk_dev_identity_updated_by FOREIGN KEY (updated_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================
+-- Autenticacion biometrica - Huellas digitales
+-- =============================================================
+
+-- Tabla para almacenar datos de huellas digitales
+CREATE TABLE IF NOT EXISTS user_biometric_fingerprints (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL UNIQUE,
+    template_data LONGBLOB NOT NULL,
+    fingerprint_hash VARCHAR(255) NOT NULL,
+    device_type VARCHAR(100) NOT NULL DEFAULT 'morpho_e3_e4',
+    device_serial VARCHAR(255) DEFAULT NULL,
+    is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    last_verified_at DATETIME DEFAULT NULL,
+    verification_count INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_biometric_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    KEY idx_biometric_enabled (is_enabled),
+    KEY idx_biometric_updated (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla para credenciales WebAuthn (lector de huella del PC / FIDO2)
+CREATE TABLE IF NOT EXISTS user_webauthn_credentials (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED NOT NULL,
+    credential_id VARCHAR(1024) NOT NULL UNIQUE,
+    public_key_pem TEXT NOT NULL,
+    sign_count INT UNSIGNED NOT NULL DEFAULT 0,
+    device_label VARCHAR(100) DEFAULT 'platform',
+    is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    last_used_at DATETIME DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_webauthn_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    KEY idx_webauthn_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla para historial de intentos de autenticacion biometrica
+CREATE TABLE IF NOT EXISTS biometric_login_attempts (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT UNSIGNED DEFAULT NULL,
+    device_type VARCHAR(100) NOT NULL DEFAULT 'morpho_e3_e4',
+    attempt_type ENUM('capture','verify','failed_verify','success') NOT NULL,
+    status ENUM('success','failure','timeout','device_error') NOT NULL,
+    error_message TEXT DEFAULT NULL,
+    ip_address VARCHAR(45) DEFAULT NULL,
+    user_agent VARCHAR(255) DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_biometric_attempts_user (user_id),
+    KEY idx_biometric_attempts_created (created_at),
+    CONSTRAINT fk_biometric_attempts_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

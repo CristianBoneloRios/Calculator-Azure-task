@@ -60,13 +60,15 @@ switch ($action) {
                     CASE WHEN n.user_id = :user_id THEN 1 ELSE 0 END AS is_owner,\
                     CASE WHEN n.user_id = :user_id THEN "mine" ELSE "shared" END AS note_scope,\
                     (SELECT COUNT(*) FROM note_comments nc WHERE nc.note_id = n.id) AS comments_count\
-             FROM notes n\
-             LEFT JOIN note_shares ns\
-               ON ns.note_id = n.id\
-              AND ns.is_active = 1\
-              AND LOWER(ns.invited_email) = :user_email\
-             WHERE n.user_id = :user_id OR ns.id IS NOT NULL\
-             GROUP BY n.id\
+                         FROM notes n\
+                         WHERE n.user_id = :user_id\
+                                OR EXISTS (\
+                                        SELECT 1\
+                                        FROM note_shares ns\
+                                        WHERE ns.note_id = n.id\
+                                            AND ns.is_active = 1\
+                                            AND LOWER(ns.invited_email) = :user_email\
+                                )\
              ORDER BY n.is_pinned DESC, n.updated_at DESC';
 
         jsonResponse([
@@ -436,6 +438,363 @@ switch ($action) {
             'user_id' => $user['id'],
         ]);
         jsonResponse(['ok' => true, 'message' => 'Meta eliminada.']);
+        break;
+
+    case 'finance_list':
+        $movements = fetchAll(
+            $pdo,
+            'SELECT id, movement_type, amount, category, description, movement_date, source_channel, created_at
+             FROM finance_movements
+             WHERE user_id = :user_id
+             ORDER BY movement_date DESC, id DESC',
+            ['user_id' => (int) $user['id']]
+        );
+
+        $totals = [
+            'income' => 0.0,
+            'expense' => 0.0,
+            'investment' => 0.0,
+            'tax' => 0.0,
+        ];
+
+        foreach ($movements as $movement) {
+            $type = (string) ($movement['movement_type'] ?? '');
+            if (!array_key_exists($type, $totals)) {
+                continue;
+            }
+            $totals[$type] += (float) ($movement['amount'] ?? 0);
+        }
+
+        $net = $totals['income'] - $totals['expense'] - $totals['investment'] - $totals['tax'];
+        $savingsRate = $totals['income'] > 0 ? max(0, ($net / $totals['income']) * 100) : 0;
+
+        jsonResponse([
+            'ok' => true,
+            'movements' => $movements,
+            'summary' => [
+                'income' => round($totals['income'], 2),
+                'expense' => round($totals['expense'], 2),
+                'investment' => round($totals['investment'], 2),
+                'tax' => round($totals['tax'], 2),
+                'net' => round($net, 2),
+                'savings_rate' => round($savingsRate, 2),
+            ],
+        ]);
+        break;
+
+    case 'finance_save':
+        $type = trim((string) ($input['type'] ?? 'income'));
+        $amount = (float) ($input['amount'] ?? 0);
+        $category = trim((string) ($input['category'] ?? ''));
+        $movementDate = trim((string) ($input['date'] ?? ''));
+        $description = trim((string) ($input['description'] ?? ''));
+
+        $allowedTypes = ['income', 'expense', 'investment', 'tax'];
+        if (!in_array($type, $allowedTypes, true)) {
+            jsonResponse(['ok' => false, 'message' => 'Tipo de movimiento invalido.'], 422);
+        }
+
+        if (!is_finite($amount) || $amount <= 0) {
+            jsonResponse(['ok' => false, 'message' => 'El monto debe ser mayor a cero.'], 422);
+        }
+
+        if ($movementDate === '') {
+            $movementDate = date('Y-m-d');
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $movementDate)) {
+            jsonResponse(['ok' => false, 'message' => 'La fecha del movimiento no es valida.'], 422);
+        }
+
+        executeStatement(
+            $pdo,
+            'INSERT INTO finance_movements (user_id, movement_type, amount, category, description, movement_date, source_channel)
+             VALUES (:user_id, :movement_type, :amount, :category, :description, :movement_date, :source_channel)',
+            [
+                'user_id' => (int) $user['id'],
+                'movement_type' => $type,
+                'amount' => round($amount, 2),
+                'category' => $category !== '' ? mb_substr($category, 0, 120) : null,
+                'description' => $description !== '' ? mb_substr($description, 0, 3000) : null,
+                'movement_date' => $movementDate,
+                'source_channel' => 'workspace_finanzas',
+            ]
+        );
+
+        jsonResponse([
+            'ok' => true,
+            'message' => 'Movimiento guardado en base de datos.',
+            'id' => (int) $pdo->lastInsertId(),
+        ]);
+        break;
+
+    case 'finance_simulation_save':
+        $simulatorType = trim((string) ($input['simulator_type'] ?? ''));
+        $inputPayload = $input['input_payload'] ?? null;
+        $resultPayload = $input['result_payload'] ?? null;
+        $resultSummary = trim((string) ($input['result_summary'] ?? ''));
+        $simulatedAtRaw = trim((string) ($input['simulated_at'] ?? ''));
+
+        $allowedSimulatorTypes = ['compound_interest', 'home_capacity', 'leasing_vs_credit', 'tax_burden'];
+        if (!in_array($simulatorType, $allowedSimulatorTypes, true)) {
+            jsonResponse(['ok' => false, 'message' => 'Tipo de simulador invalido.'], 422);
+        }
+
+        if (!is_array($inputPayload) || !is_array($resultPayload)) {
+            jsonResponse(['ok' => false, 'message' => 'Los datos de entrada y resultado deben ser JSON valido.'], 422);
+        }
+
+        if ($resultSummary === '') {
+            jsonResponse(['ok' => false, 'message' => 'El resumen del resultado es obligatorio.'], 422);
+        }
+
+        $simulatedAtTs = $simulatedAtRaw !== '' ? strtotime($simulatedAtRaw) : time();
+        if ($simulatedAtTs === false) {
+            $simulatedAtTs = time();
+        }
+        $simulatedAt = date('Y-m-d H:i:s', $simulatedAtTs);
+
+        executeStatement(
+            $pdo,
+            'INSERT INTO finance_simulation_history (user_id, simulator_type, input_payload, result_payload, result_summary, simulated_at)
+             VALUES (:user_id, :simulator_type, :input_payload, :result_payload, :result_summary, :simulated_at)',
+            [
+                'user_id' => (int) $user['id'],
+                'simulator_type' => $simulatorType,
+                'input_payload' => json_encode($inputPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'result_payload' => json_encode($resultPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'result_summary' => mb_substr($resultSummary, 0, 2000),
+                'simulated_at' => $simulatedAt,
+            ]
+        );
+
+        $insertId = (int) $pdo->lastInsertId();
+        jsonResponse([
+            'ok' => true,
+            'message' => 'Simulacion guardada en historial.',
+            'simulation' => [
+                'id' => $insertId,
+                'simulator_type' => $simulatorType,
+                'input_payload' => $inputPayload,
+                'result_payload' => $resultPayload,
+                'result_summary' => mb_substr($resultSummary, 0, 2000),
+                'simulated_at' => $simulatedAt,
+            ],
+        ]);
+        break;
+
+    case 'finance_simulation_list':
+        $simulatorTypeFilter = trim((string) ($input['simulator_type'] ?? ''));
+        $fromDateFilter = trim((string) ($input['from_date'] ?? ''));
+        $toDateFilter = trim((string) ($input['to_date'] ?? ''));
+        $page = (int) ($input['page'] ?? 1);
+        if ($page < 1) {
+            $page = 1;
+        }
+
+        $pageSize = (int) ($input['page_size'] ?? ($input['limit'] ?? 20));
+        if ($pageSize < 1) {
+            $pageSize = 20;
+        }
+        if ($pageSize > 100) {
+            $pageSize = 100;
+        }
+
+        $allowedSimulatorTypes = ['compound_interest', 'home_capacity', 'leasing_vs_credit', 'tax_burden'];
+        if ($simulatorTypeFilter !== '' && !in_array($simulatorTypeFilter, $allowedSimulatorTypes, true)) {
+            jsonResponse(['ok' => false, 'message' => 'Filtro de simulador invalido.'], 422);
+        }
+
+        if ($fromDateFilter !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromDateFilter)) {
+            jsonResponse(['ok' => false, 'message' => 'Filtro fecha desde invalido.'], 422);
+        }
+
+        if ($toDateFilter !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $toDateFilter)) {
+            jsonResponse(['ok' => false, 'message' => 'Filtro fecha hasta invalido.'], 422);
+        }
+
+        $conditions = ['user_id = :user_id'];
+        $params = ['user_id' => (int) $user['id']];
+
+        if ($simulatorTypeFilter !== '') {
+            $conditions[] = 'simulator_type = :simulator_type';
+            $params['simulator_type'] = $simulatorTypeFilter;
+        }
+
+        if ($fromDateFilter !== '') {
+            $conditions[] = 'simulated_at >= :from_date_start';
+            $params['from_date_start'] = $fromDateFilter . ' 00:00:00';
+        }
+
+        if ($toDateFilter !== '') {
+            $conditions[] = 'simulated_at <= :to_date_end';
+            $params['to_date_end'] = $toDateFilter . ' 23:59:59';
+        }
+
+        $whereClause = implode(' AND ', $conditions);
+        $total = (int) fetchScalar(
+            $pdo,
+            'SELECT COUNT(*) FROM finance_simulation_history WHERE ' . $whereClause,
+            $params
+        );
+        $totalPages = $total > 0 ? (int) ceil($total / $pageSize) : 1;
+        if ($page > $totalPages) {
+            $page = $totalPages;
+        }
+        $offset = ($page - 1) * $pageSize;
+
+        $rows = fetchAll(
+            $pdo,
+            'SELECT id, simulator_type, input_payload, result_payload, result_summary, simulated_at, created_at
+             FROM finance_simulation_history
+             WHERE ' . $whereClause . '
+             ORDER BY simulated_at DESC, id DESC
+             LIMIT ' . $pageSize . ' OFFSET ' . $offset,
+            $params
+        );
+
+        $simulations = array_map(static function (array $row): array {
+            $inputPayload = json_decode((string) ($row['input_payload'] ?? '{}'), true);
+            $resultPayload = json_decode((string) ($row['result_payload'] ?? '{}'), true);
+            return [
+                'id' => (int) ($row['id'] ?? 0),
+                'simulator_type' => (string) ($row['simulator_type'] ?? ''),
+                'input_payload' => is_array($inputPayload) ? $inputPayload : [],
+                'result_payload' => is_array($resultPayload) ? $resultPayload : [],
+                'result_summary' => (string) ($row['result_summary'] ?? ''),
+                'simulated_at' => (string) ($row['simulated_at'] ?? ''),
+                'created_at' => (string) ($row['created_at'] ?? ''),
+            ];
+        }, $rows);
+
+        jsonResponse([
+            'ok' => true,
+            'simulations' => $simulations,
+            'pagination' => [
+                'page' => $page,
+                'page_size' => $pageSize,
+                'total' => $total,
+                'total_pages' => $totalPages,
+                'has_prev' => $page > 1,
+                'has_next' => $page < $totalPages,
+            ],
+        ]);
+        break;
+
+    case 'finance_simulation_delete':
+        $simulationId = (int) ($input['simulation_id'] ?? 0);
+        if ($simulationId <= 0) {
+            jsonResponse(['ok' => false, 'message' => 'Debes seleccionar una simulacion valida.'], 422);
+        }
+
+        executeStatement(
+            $pdo,
+            'DELETE FROM finance_simulation_history WHERE id = :id AND user_id = :user_id',
+            [
+                'id' => $simulationId,
+                'user_id' => (int) $user['id'],
+            ]
+        );
+
+        jsonResponse([
+            'ok' => true,
+            'message' => 'Simulacion eliminada del historial.',
+        ]);
+        break;
+
+    case 'finance_simulation_purge':
+        $olderThanDays = (int) ($input['older_than_days'] ?? 90);
+        if ($olderThanDays < 7) {
+            $olderThanDays = 7;
+        }
+        if ($olderThanDays > 3650) {
+            $olderThanDays = 3650;
+        }
+
+        $cutoff = date('Y-m-d H:i:s', time() - ($olderThanDays * 86400));
+
+        $stmt = $pdo->prepare('DELETE FROM finance_simulation_history WHERE user_id = :user_id AND simulated_at < :cutoff');
+        $stmt->execute([
+            'user_id' => (int) $user['id'],
+            'cutoff' => $cutoff,
+        ]);
+
+        jsonResponse([
+            'ok' => true,
+            'message' => 'Se eliminaron simulaciones antiguas.',
+            'deleted_count' => (int) $stmt->rowCount(),
+            'cutoff' => $cutoff,
+        ]);
+        break;
+
+    case 'finance_simulation_export_pdf':
+        $simulationId = (int) ($input['simulation_id'] ?? 0);
+        $simulatorType = trim((string) ($input['simulator_type'] ?? ''));
+        $inputPayload = is_array($input['input_payload'] ?? null) ? $input['input_payload'] : [];
+        $resultPayload = is_array($input['result_payload'] ?? null) ? $input['result_payload'] : [];
+        $resultSummary = trim((string) ($input['result_summary'] ?? ''));
+        $simulatedAtRaw = trim((string) ($input['simulated_at'] ?? ''));
+
+        if ($simulationId > 0) {
+            $stored = fetchOne(
+                $pdo,
+                'SELECT simulator_type, input_payload, result_payload, result_summary, simulated_at
+                 FROM finance_simulation_history
+                 WHERE id = :id AND user_id = :user_id
+                 LIMIT 1',
+                ['id' => $simulationId, 'user_id' => (int) $user['id']]
+            );
+
+            if ($stored === null) {
+                jsonResponse(['ok' => false, 'message' => 'No se encontro esa simulacion en tu historial.'], 404);
+            }
+
+            $simulatorType = (string) ($stored['simulator_type'] ?? $simulatorType);
+            $decodedInput = json_decode((string) ($stored['input_payload'] ?? '{}'), true);
+            $decodedResult = json_decode((string) ($stored['result_payload'] ?? '{}'), true);
+            $inputPayload = is_array($decodedInput) ? $decodedInput : [];
+            $resultPayload = is_array($decodedResult) ? $decodedResult : [];
+            $resultSummary = (string) ($stored['result_summary'] ?? $resultSummary);
+            $simulatedAtRaw = (string) ($stored['simulated_at'] ?? $simulatedAtRaw);
+        }
+
+        if ($simulatorType === '' || $resultSummary === '') {
+            jsonResponse(['ok' => false, 'message' => 'Faltan datos para generar el PDF.'], 422);
+        }
+
+        $simulatorLabel = financeSimulatorLabel($simulatorType);
+        $simulatedTs = $simulatedAtRaw !== '' ? strtotime($simulatedAtRaw) : time();
+        if ($simulatedTs === false) {
+            $simulatedTs = time();
+        }
+
+        $lines = [
+            'Reporte de simulacion financiera',
+            'Simulador: ' . $simulatorLabel,
+            'Fecha: ' . date('Y-m-d H:i:s', $simulatedTs),
+            'Usuario: ' . ((string) ($user['full_name'] ?? 'Usuario')),
+            'Email: ' . ((string) ($user['email'] ?? '')),
+            'Resumen: ' . $resultSummary,
+            '--- Entradas ---',
+        ];
+
+        foreach (flattenFinancePdfFields($inputPayload, 'input') as $fieldLine) {
+            $lines[] = $fieldLine;
+        }
+
+        $lines[] = '--- Resultados ---';
+        foreach (flattenFinancePdfFields($resultPayload, 'result') as $fieldLine) {
+            $lines[] = $fieldLine;
+        }
+
+        $pdfBinary = buildSimpleFinancePdf($lines);
+        $filename = 'simulacion-' . preg_replace('/[^a-z0-9\-]+/i', '-', strtolower($simulatorType)) . '-' . date('Ymd-His') . '.pdf';
+
+        jsonResponse([
+            'ok' => true,
+            'file_name' => $filename,
+            'file_base64' => base64_encode($pdfBinary),
+            'mime_type' => 'application/pdf',
+        ]);
         break;
 
     case 'calendar_list':
@@ -812,6 +1171,18 @@ switch ($action) {
         $_SESSION['_2fa_setup_user_id'] = (int) $user['id'];
         $_SESSION['_2fa_setup_secret'] = $secret;
 
+        executeStatement(
+            $pdo,
+            'UPDATE users
+             SET two_factor_setup_secret = :setup_secret,
+                 two_factor_setup_expires_at = DATE_ADD(NOW(), INTERVAL 15 MINUTE)
+             WHERE id = :id',
+            [
+                'setup_secret' => $secret,
+                'id' => (int) $user['id'],
+            ]
+        );
+
         $label = urlencode('Azure Task Suite (' . (string) $user['email'] . ')');
         $issuer = urlencode('Azure Task Suite');
         $otpauthUrl = 'otpauth://totp/' . $label . '?secret=' . $secret . '&issuer=' . $issuer;
@@ -828,46 +1199,111 @@ switch ($action) {
     case 'profile_2fa_enable':
         ensureTwoFactorSchemaReady($pdo);
 
-        $code = trim((string) ($input['code'] ?? ''));
+        $rawRequestBody = file_get_contents('php://input');
+        $rawRequestCode = '';
+        if (is_string($rawRequestBody) && $rawRequestBody !== '') {
+            parse_str($rawRequestBody, $rawParsed);
+            if (is_array($rawParsed)) {
+                $rawRequestCode = (string) ($rawParsed['code'] ?? '');
+            }
+        }
+
+        $code = trim((string) (
+            $input['code']
+            ?? $_POST['code']
+            ?? $_GET['code']
+            ?? $_REQUEST['code']
+            ?? $rawRequestCode
+            ?? ''
+        ));
         $setupUserId = (int) ($_SESSION['_2fa_setup_user_id'] ?? 0);
         $setupSecret = (string) ($_SESSION['_2fa_setup_secret'] ?? '');
 
+        $setupDbRow = fetchOne(
+            $pdo,
+            'SELECT two_factor_setup_secret, two_factor_setup_expires_at
+             FROM users
+             WHERE id = :id
+             LIMIT 1',
+            ['id' => (int) $user['id']]
+        );
+
+        $setupSecretFromDb = '';
+        if (is_array($setupDbRow)) {
+            $dbSecret = (string) ($setupDbRow['two_factor_setup_secret'] ?? '');
+            $dbExpiresAt = (string) ($setupDbRow['two_factor_setup_expires_at'] ?? '');
+            $isDbSecretUsable = $dbSecret !== '' && (
+                $dbExpiresAt === '' ||
+                strtotime($dbExpiresAt) === false ||
+                strtotime($dbExpiresAt) >= time()
+            );
+
+            if ($isDbSecretUsable) {
+                $setupSecretFromDb = $dbSecret;
+            }
+        }
+
+        if ($setupSecret === '' && $setupSecretFromDb !== '') {
+            $setupSecret = $setupSecretFromDb;
+            $setupUserId = (int) $user['id'];
+        }
+
+        if (!$code) {
+            jsonResponse(['ok' => false, 'message' => 'Ingresa el codigo 2FA de 6 digitos.'], 422);
+        }
+
         if ($setupUserId !== (int) $user['id'] || $setupSecret === '') {
-            jsonResponse(['ok' => false, 'message' => 'Primero genera y escanea un QR de 2FA.'], 422);
+            jsonResponse(['ok' => false, 'message' => 'Primero genera y escanea un QR de 2FA. Si el QR expiro, genera uno nuevo.'], 422);
         }
 
         if (!verifyTwoFactorCode($setupSecret, $code)) {
-            jsonResponse(['ok' => false, 'message' => 'Codigo 2FA invalido.'], 422);
+            jsonResponse(['ok' => false, 'message' => 'Codigo 2FA invalido. Verifica que tu telefono este sincronizado con la hora correcta.'], 422);
         }
 
-        $recoveryCodes = generateTwoFactorRecoveryCodes();
-
-        $pdo->beginTransaction();
         try {
-            executeStatement($pdo, 'UPDATE users SET two_factor_secret = :secret, two_factor_enabled = 1 WHERE id = :id', [
-                'secret' => $setupSecret,
-                'id' => (int) $user['id'],
-            ]);
-            storeTwoFactorRecoveryCodes($pdo, (int) $user['id'], $recoveryCodes);
-            $pdo->commit();
-        } catch (Throwable $throwable) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
+            $recoveryCodes = generateTwoFactorRecoveryCodes();
+
+            $pdo->beginTransaction();
+            try {
+                executeStatement(
+                    $pdo,
+                    'UPDATE users
+                     SET two_factor_secret = :secret,
+                         two_factor_enabled = 1,
+                         two_factor_setup_secret = NULL,
+                         two_factor_setup_expires_at = NULL
+                     WHERE id = :id',
+                    [
+                        'secret' => $setupSecret,
+                        'id' => (int) $user['id'],
+                    ]
+                );
+                storeTwoFactorRecoveryCodes($pdo, (int) $user['id'], $recoveryCodes);
+                $pdo->commit();
+            } catch (Throwable $throwable) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $throwable;
             }
-            throw $throwable;
+
+            unset($_SESSION['_2fa_setup_user_id'], $_SESSION['_2fa_setup_secret']);
+
+            $updatedUser = $user;
+            $updatedUser['two_factor_enabled'] = true;
+
+            jsonResponse([
+                'ok' => true,
+                'message' => '2FA activado correctamente. Guarda tus codigos de recuperacion en un lugar seguro.',
+                'user' => $updatedUser,
+                'recovery_codes' => $recoveryCodes,
+            ]);
+        } catch (Throwable $e) {
+            jsonResponse([
+                'ok' => false,
+                'message' => 'Error al activar 2FA: ' . ($e->getMessage() ?? 'Unknown error')
+            ], 500);
         }
-
-        unset($_SESSION['_2fa_setup_user_id'], $_SESSION['_2fa_setup_secret']);
-
-        $updatedUser = $user;
-        $updatedUser['two_factor_enabled'] = true;
-
-        jsonResponse([
-            'ok' => true,
-            'message' => '2FA activado correctamente. Guarda tus codigos de recuperacion en un lugar seguro.',
-            'user' => $updatedUser,
-            'recovery_codes' => $recoveryCodes,
-        ]);
         break;
 
     case 'profile_2fa_disable':
@@ -875,9 +1311,18 @@ switch ($action) {
 
         $pdo->beginTransaction();
         try {
-            executeStatement($pdo, 'UPDATE users SET two_factor_secret = NULL, two_factor_enabled = 0 WHERE id = :id', [
-                'id' => (int) $user['id'],
-            ]);
+            executeStatement(
+                $pdo,
+                'UPDATE users
+                 SET two_factor_secret = NULL,
+                     two_factor_enabled = 0,
+                     two_factor_setup_secret = NULL,
+                     two_factor_setup_expires_at = NULL
+                 WHERE id = :id',
+                [
+                    'id' => (int) $user['id'],
+                ]
+            );
             executeStatement($pdo, 'DELETE FROM two_factor_recovery_codes WHERE user_id = :user_id', [
                 'user_id' => (int) $user['id'],
             ]);
@@ -1173,4 +1618,114 @@ function buildPowerAutomateErrorMessage(string $baseMessage, array $result): str
     }
 
     return $baseMessage . ' Detalle: ' . implode(' | ', $details);
+}
+
+function financeSimulatorLabel(string $simulatorType): string
+{
+    $labels = [
+        'compound_interest' => 'Interes compuesto',
+        'home_capacity' => 'Capacidad de vivienda',
+        'leasing_vs_credit' => 'Leasing vs credito',
+        'tax_burden' => 'Carga tributaria',
+    ];
+
+    return $labels[$simulatorType] ?? 'Simulador financiero';
+}
+
+function flattenFinancePdfFields(array $payload, string $prefix = ''): array
+{
+    $lines = [];
+    foreach ($payload as $key => $value) {
+        $safeKey = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', (string) $key);
+        $path = $prefix !== '' ? ($prefix . '.' . $safeKey) : $safeKey;
+
+        if (is_array($value)) {
+            foreach (flattenFinancePdfFields($value, $path) as $nestedLine) {
+                $lines[] = $nestedLine;
+            }
+            continue;
+        }
+
+        if (is_bool($value)) {
+            $value = $value ? 'true' : 'false';
+        }
+
+        if ($value === null) {
+            $value = 'null';
+        }
+
+        $lineValue = mb_substr((string) $value, 0, 120);
+        $lines[] = $path . ': ' . $lineValue;
+    }
+
+    if (count($lines) > 40) {
+        $lines = array_slice($lines, 0, 40);
+        $lines[] = '... (truncado por limite de reporte)';
+    }
+
+    return $lines;
+}
+
+function buildSimpleFinancePdf(array $rawLines): string
+{
+    $lines = [];
+    foreach ($rawLines as $line) {
+        $normalized = preg_replace('/[^\x20-\x7E]/', ' ', (string) $line);
+        $normalized = trim((string) preg_replace('/\s+/', ' ', (string) $normalized));
+        if ($normalized === '') {
+            continue;
+        }
+        $lines[] = mb_substr($normalized, 0, 110);
+    }
+
+    if ($lines === []) {
+        $lines = ['Sin contenido para exportar.'];
+    }
+
+    $maxLines = 46;
+    if (count($lines) > $maxLines) {
+        $lines = array_slice($lines, 0, $maxLines);
+        $lines[] = '... contenido truncado';
+    }
+
+    $content = "BT\n/F1 10 Tf\n50 800 Td\n14 TL\n";
+    foreach ($lines as $index => $line) {
+        $escaped = str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $line);
+        if ($index === 0) {
+            $content .= '(' . $escaped . ") Tj\n";
+        } else {
+            $content .= 'T* (' . $escaped . ") Tj\n";
+        }
+    }
+    $content .= "ET\n";
+
+    $objects = [];
+    $objects[] = '<< /Type /Catalog /Pages 2 0 R >>';
+    $objects[] = '<< /Type /Pages /Kids [3 0 R] /Count 1 >>';
+    $objects[] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>';
+    $objects[] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+    $objects[] = '<< /Length ' . strlen($content) . " >>\nstream\n" . $content . 'endstream';
+
+    $pdf = "%PDF-1.4\n";
+    $offsets = [0];
+
+    foreach ($objects as $index => $objectBody) {
+        $offsets[] = strlen($pdf);
+        $objNumber = $index + 1;
+        $pdf .= $objNumber . " 0 obj\n" . $objectBody . "\nendobj\n";
+    }
+
+    $xrefOffset = strlen($pdf);
+    $pdf .= 'xref' . "\n";
+    $pdf .= '0 ' . (count($objects) + 1) . "\n";
+    $pdf .= "0000000000 65535 f \n";
+
+    for ($i = 1; $i <= count($objects); $i++) {
+        $pdf .= str_pad((string) $offsets[$i], 10, '0', STR_PAD_LEFT) . " 00000 n \n";
+    }
+
+    $pdf .= 'trailer << /Size ' . (count($objects) + 1) . ' /Root 1 0 R >>' . "\n";
+    $pdf .= 'startxref' . "\n" . $xrefOffset . "\n%%EOF";
+
+    return $pdf;
 }

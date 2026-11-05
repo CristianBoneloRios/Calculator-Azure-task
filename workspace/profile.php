@@ -23,6 +23,8 @@ workspaceLayoutStart('Perfil y foto', 'profile', $user);
       <div class="profile-identity-avatar-wrap">
         <img id="profileIdentityPhoto" class="profile-identity-avatar" alt="Foto del usuario">
         <span id="profileIdentityFallback" class="profile-identity-fallback"><i class="fas fa-user"></i></span>
+        <div class="profile-avatar-ripple"></div>
+        <div class="profile-avatar-ripple delay-1"></div>
       </div>
       <div class="profile-identity-meta">
         <h4 id="profileIdentityName">Usuario del Workspace</h4>
@@ -109,7 +111,7 @@ workspaceLayoutStart('Perfil y foto', 'profile', $user);
         <p class="workspace-muted">Activa 2FA para proteger tu cuenta con un codigo temporal desde Google Authenticator, Authy u otra app TOTP.</p>
         <div class="profile-2fa-toggle-row">
           <label class="profile-2fa-toggle" for="profile2FAToggle">
-            <input type="checkbox" id="profile2FAToggle">
+            <input type="checkbox" id="profile2FAToggle" aria-label="Activar o desactivar autenticacion de dos factores">
             <span class="profile-2fa-toggle-slider"></span>
           </label>
           <div>
@@ -141,6 +143,81 @@ workspaceLayoutStart('Perfil y foto', 'profile', $user);
             <input type="text" class="form-control" id="profile2FACode" inputmode="numeric" maxlength="6" placeholder="000000">
           </div>
           <button type="button" class="btn btn-primary" id="profile2FAEnableBtn"><i class="fas fa-check-circle"></i> Activar 2FA</button>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <article class="workspace-panel wide profile-biometric-panel">
+    <div class="workspace-panel-header profile-panel-header">
+      <div>
+        <span class="eyebrow">Biometria</span>
+        <h3>Autenticacion por huella digital</h3>
+      </div>
+      <span class="workspace-tag" id="profileBiometricTag"><i class="fas fa-fingerprint"></i> No configurada</span>
+    </div>
+
+    <div class="profile-biometric-grid">
+      <div class="profile-biometric-left">
+        <p class="workspace-muted">Registra tu huella digital para autenticarte rapidamente en el login usando tu captor Morpho E3/E4.</p>
+        
+        <div class="profile-biometric-status" id="profileBiometricStatus">
+          <div class="profile-biometric-device-status">
+            <i class="fas fa-circle-dot" id="profileBiometricDeviceIndicator" style="color: #e74c3c;"></i>
+            <span id="profileBiometricDeviceStatusText">Buscando captor...</span>
+          </div>
+        </div>
+
+        <div class="workspace-actions">
+          <button type="button" class="btn btn-primary" id="profileBiometricEnrollBtn">
+            <i class="fas fa-fingerprint"></i> Registrar huella digital
+          </button>
+          <button type="button" class="btn btn-outline-light" id="profileBiometricDisableBtn" hidden>
+            <i class="fas fa-trash"></i> Eliminar huella
+          </button>
+        </div>
+
+        <div class="profile-biometric-info" id="profileBiometricInfo" hidden>
+          <p class="workspace-muted"><strong>Informacion de la huella registrada:</strong></p>
+          <ul>
+            <li>Dispositivo: <span id="profileBiometricDeviceType">-</span></li>
+            <li>Numero de verificaciones: <span id="profileBiometricVerificationCount">0</span></li>
+            <li>Ultima verificacion: <span id="profileBiometricLastVerified">Nunca</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="profile-biometric-right">
+        <div class="profile-biometric-capture-stage" id="profileBiometricCaptureStage" hidden>
+          <div class="profile-biometric-capture-icon">
+            <i class="fas fa-fingerprint"></i>
+          </div>
+          <h4 id="profileBiometricCapturePrompt">Acerca tu dedo al captor</h4>
+          <p id="profileBiometricCaptureStatus">Esperando captura...</p>
+          <div class="profile-biometric-progress">
+            <div class="profile-biometric-progress-bar" id="profileBiometricProgressBar"></div>
+          </div>
+          <div class="workspace-actions">
+            <button type="button" class="btn btn-outline-light" id="profileBiometricCancelBtn">
+              <i class="fas fa-times"></i> Cancelar
+            </button>
+          </div>
+        </div>
+
+        <div class="profile-biometric-confirm" id="profileBiometricConfirm" hidden>
+          <div class="profile-biometric-success-icon">
+            <i class="fas fa-check-circle"></i>
+          </div>
+          <h4>Huella capturada exitosamente</h4>
+          <p>Se han registrado los datos de tu huella digital. Ahora podrás autenticarte usando tu captor en el login.</p>
+          <div class="workspace-actions">
+            <button type="button" class="btn btn-primary" id="profileBiometricSaveBtn">
+              <i class="fas fa-save"></i> Guardar huella digital
+            </button>
+            <button type="button" class="btn btn-outline-light" id="profileBiometricRetryBtn">
+              <i class="fas fa-redo"></i> Capturar nuevamente
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -271,3 +348,7 @@ workspaceLayoutStart('Perfil y foto', 'profile', $user);
   </article>
 </div>
 <?php workspaceLayoutEnd(); ?>
+
+<!-- Scripts para biometría -->
+<script src="assets/biometric-manager.js"></script>
+<script src="assets/profile-biometric.js"></script>

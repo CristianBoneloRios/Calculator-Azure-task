@@ -22,6 +22,13 @@ function workspaceLayoutStart(string $title, string $activePage, array $user): v
   <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-bold-rounded/css/uicons-bold-rounded.css" />
   <link rel="stylesheet" href="../styles.css">
   <link rel="stylesheet" href="assets/workspace.css">
+  <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "z92juyhuaf");
+  </script>
   <?php if ($activePage === 'profile'): ?>
     <link rel="stylesheet" href="assets/profile.css">
   <?php endif; ?>
@@ -87,12 +94,30 @@ function workspaceLayoutStart(string $title, string $activePage, array $user): v
             <?php echo workspaceNavLink('Notas Importantes', 'notes.php', 'notes', $activePage, 'fa-note-sticky'); ?>
             <?php echo workspaceNavLink('Tareas del Dia', 'tasks.php', 'tasks', $activePage, 'fa-list-check'); ?>
             <?php echo workspaceNavLink('Metas', 'goals.php', 'goals', $activePage, 'fa-bullseye'); ?>
+            <?php echo workspaceNavLink('Finanzas profesional', 'finanzas.php', 'finanzas', $activePage, 'fa-sack-dollar'); ?>
             <?php echo workspaceNavLink('Calendario', 'calendar.php', 'calendar', $activePage, 'fa-calendar-days'); ?>
             <?php echo workspaceNavLink('Generacion documentos', 'generacion_documentos.php', 'generacion_documentos', $activePage, 'fa-file-lines'); ?>
           </div>
 
           <div class="nav-section">
             <span class="nav-section-label">Sesion</span>
+            <!-- Usuario Logueado -->
+            <div class="about-me-btn" style="cursor:default;margin-bottom:8px;">
+              <?php if ($photo): ?>
+                <div class="about-me-btn-avatar">
+                  <img src="<?php echo htmlspecialchars($photo, ENT_QUOTES, 'UTF-8'); ?>" alt="Foto del usuario" />
+                </div>
+              <?php else: ?>
+                <div class="about-me-btn-avatar">
+                  <i class="fas fa-user"></i>
+                </div>
+              <?php endif; ?>
+              <div class="about-me-btn-info">
+                <span class="about-me-btn-name"><?php echo htmlspecialchars((string) ($user['full_name'] ?? 'Usuario'), ENT_QUOTES, 'UTF-8'); ?></span>
+                <span class="about-me-btn-role">Usuario logueado</span>
+              </div>
+            </div>
+            <!-- Desarrollador Propietario -->
             <div class="about-me-btn" style="cursor:default;margin-bottom:8px;">
               <?php if ($developerPhoto): ?>
                 <div class="about-me-btn-avatar">

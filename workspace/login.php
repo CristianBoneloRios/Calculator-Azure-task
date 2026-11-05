@@ -27,6 +27,13 @@ try {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/uicons-bold-rounded/css/uicons-bold-rounded.css" />
   <link rel="stylesheet" href="../styles.css">
+  <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "z92juyhuaf");
+  </script>
 </head>
 <body class="auth-page-body">
   <header class="app-header">
@@ -117,6 +124,54 @@ try {
         <div class="auth-switch">
           <span>No tienes cuenta?</span>
           <a href="register.php">Registrate aqui</a>
+        </div>
+
+        <!-- Sección de autenticación biométrica -->
+        <div class="auth-divider">
+          <span>O</span>
+        </div>
+
+        <div class="auth-biometric-section">
+          <h3>Autenticacion rapida</h3>
+          <p class="auth-muted">Usa tu huella digital para iniciar sesion instantaneamente</p>
+          
+          <div class="auth-biometric-status" id="loginBiometricStatus">
+            <div class="auth-biometric-indicator">
+              <i class="fas fa-circle-dot" id="loginBiometricDeviceIndicator"></i>
+              <span id="loginBiometricStatusText">Verificando captor...</span>
+            </div>
+          </div>
+
+          <div class="auth-biometric-form" id="loginBiometricForm" hidden>
+            <div>
+              <label for="loginBiometricEmail">Correo</label>
+              <input type="email" id="loginBiometricEmail" placeholder="tu@correo.com" autocomplete="username">
+            </div>
+            
+            <div class="auth-biometric-capture" id="loginBiometricCapture" hidden>
+              <div class="auth-biometric-icon">
+                <i class="fas fa-fingerprint"></i>
+              </div>
+              <p id="loginBiometricPrompt">Acerca tu dedo al captor</p>
+              <div class="auth-biometric-progress">
+                <div id="loginBiometricProgressBar" class="auth-biometric-progress-bar"></div>
+              </div>
+            </div>
+
+            <div class="auth-actions">
+              <button type="button" class="btn btn-primary" id="loginBiometricBtn">
+                <i class="fas fa-fingerprint"></i> Usar huella digital
+              </button>
+              <button type="button" class="btn btn-outline-light" id="loginBiometricCancelBtn" hidden>
+                <i class="fas fa-times"></i> Cancelar
+              </button>
+            </div>
+          </div>
+
+          <div class="auth-biometric-disabled" id="loginBiometricDisabled">
+            <p><i class="fas fa-circle-exclamation"></i> El captor Morpho no está detectado</p>
+            <small>Asegúrate de tener instalado el driver y el dispositivo conectado</small>
+          </div>
         </div>
       </div>
     </section>
@@ -246,5 +301,11 @@ try {
       }
     });
   </script>
+
+  <!-- Scripts para autenticación biométrica -->
+  <script src="assets/biometric-manager.js"></script>
+  <script src="assets/login-biometric.js"></script>
+</body>
+</html>
 </body>
 </html>

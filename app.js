@@ -208,10 +208,8 @@ document.addEventListener('DOMContentLoaded', () => {
   DOM.workspaceLoginBtnName = document.getElementById('workspaceLoginBtnName');
   DOM.workspaceLoginBtnRole = document.getElementById('workspaceLoginBtnRole');
 
-  const hasLocalPhoto = restoreAboutPhotoFromStorage();
-  if (!hasLocalPhoto) {
-    loadPublicProfilePhoto();
-  }
+  restoreAboutPhotoFromStorage();
+  loadPublicProfilePhoto();
   restoreAzureConnection();
   initUploadEvents();
   initEvents();
@@ -578,10 +576,10 @@ async function loadPublicProfilePhoto() {
     }
 
     const data = await response.json().catch(() => null);
-    const photoUrl = String(data?.profile?.photo_url || '').trim();
+    const developerPhotoUrl = String(data?.profile?.developer_photo_url || '').trim();
 
-    if (photoUrl !== '') {
-      applyAboutPhoto(photoUrl);
+    if (developerPhotoUrl !== '') {
+      applyAboutPhoto(developerPhotoUrl);
       return;
     }
 
@@ -880,6 +878,46 @@ function processData(name, ext, headers, rows) {
   };
 
   AppState.files.push(fileEntry);
+  renderFileCard(fileEntry);
+  updateGlobalStats();
+  updateFileHistory();
+  updateResultsEmptyState();
+}
+
+function upsertAzureDataInAppState(rows) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) return;
+
+  const headers = Object.keys(safeRows[0]);
+  const colMap = identifyColumns(headers);
+  const summary = calculateSummary(safeRows, colMap);
+
+  const currentProject = String(AzureConfig.project || 'Azure DevOps').trim();
+  const azureFileName = `${currentProject} (Azure DevOps)`;
+
+  const existingIndex = AppState.files.findIndex(file => file && file.source === 'azure');
+  const existing = existingIndex >= 0 ? AppState.files[existingIndex] : null;
+
+  const fileEntry = {
+    id: existing ? existing.id : `azure-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: azureFileName,
+    ext: 'csv',
+    headers,
+    rows: safeRows,
+    colMap,
+    summary,
+    source: 'azure'
+  };
+
+  if (existingIndex >= 0) {
+    AppState.files[existingIndex] = fileEntry;
+    const previousCard = Array.from(DOM.fileResultsContainer.querySelectorAll('.file-result-card'))
+      .find(card => String(card.dataset.fileId) === String(fileEntry.id));
+    if (previousCard) previousCard.remove();
+  } else {
+    AppState.files.push(fileEntry);
+  }
+
   renderFileCard(fileEntry);
   updateGlobalStats();
   updateFileHistory();
@@ -2425,6 +2463,7 @@ function convertAzureWorkItemsToRows(workItems) {
       'Tipo': fields['System.WorkItemType'] || '',
       'Estado': fields['System.State'] || '',
       'Asignado a': fields['System.AssignedTo']?.displayName || '',
+      'Start Date': fields['Microsoft.VSTS.Scheduling.StartDate'] || '',
       'Estimación Original': fields['Microsoft.VSTS.Scheduling.OriginalEstimate'] || 0,
       'Trabajo Completado': fields['Microsoft.VSTS.Scheduling.CompletedWork'] || 0,
       'Trabajo Restante': fields['Microsoft.VSTS.Scheduling.RemainingWork'] || 0,
@@ -2448,6 +2487,7 @@ async function processAzureData(rows, onBeforeRender = null) {
   // Persist to session so the data survives a page refresh
   saveAzureRowsToSession(rows);
   AzureState.rows = rows;
+  upsertAzureDataInAppState(rows);
 
   // Show the dedicated Azure panel
   await renderAzurePanel(rows, onBeforeRender);
@@ -2471,6 +2511,7 @@ function restoreAzureConnection() {
     const cached = loadAzureRowsFromSession();
     if (cached && cached.length > 0) {
       AzureState.rows = cached;
+      upsertAzureDataInAppState(cached);
       renderAzurePanel(cached);
     }
   }
@@ -2620,7 +2661,16 @@ function renderAzureTable(rows) {
 
   // Summary text
   if (DOM.azureTasksSummaryText) {
-    DOM.azureTasksSummaryText.textContent = `${AzureConfig.project} — ${rows.length} tarea${rows.length !== 1 ? 's' : ''}`;
+    const headers = Object.keys(rows[0]);
+    const colMap = identifyColumns(headers);
+    const filteredCompleted = colMap.completedWork
+      ? round2(rows.reduce((acc, row) => acc + parseHours(row[colMap.completedWork]), 0))
+      : 0;
+    const hoursSuffix = colMap.completedWork
+      ? ` · ${fmtHours(filteredCompleted)} completadas`
+      : '';
+
+    DOM.azureTasksSummaryText.textContent = `${AzureConfig.project} — ${rows.length} tarea${rows.length !== 1 ? 's' : ''}${hoursSuffix}`;
   }
 
   const headers = Object.keys(rows[0]);
@@ -2633,18 +2683,21 @@ function renderAzureTable(rows) {
 // AZURE FILTERS
 // ─────────────────────────────────────────
 function applyAzureFilters() {
-  const userQuery = (DOM.azureFilterUser.value || '').trim().toLowerCase();
+  const userQuery = normalizeFilterText(DOM.azureFilterUser.value || '');
   const stateQuery = (DOM.azureFilterState.value || '').trim().toLowerCase();
   const typeQuery = (DOM.azureFilterType && DOM.azureFilterType.value ? DOM.azureFilterType.value : '').trim().toLowerCase();
   const fromDate = (DOM.azureFilterDateFrom && DOM.azureFilterDateFrom.value ? DOM.azureFilterDateFrom.value : '').trim();
   const toDate = (DOM.azureFilterDateTo && DOM.azureFilterDateTo.value ? DOM.azureFilterDateTo.value : '').trim();
+  const headers = AzureState.rows.length ? Object.keys(AzureState.rows[0]) : [];
+  const colMap = headers.length ? identifyColumns(headers) : {};
+  const preferredDateHeader = headers.length ? pickDateColumn(headers, colMap) : null;
 
   const filtered = AzureState.rows.filter(row => {
-    const assignedTo = String(row['Asignado a'] || row['Assigned To'] || row['assignedTo'] || '').toLowerCase();
-    const assignedEmail = String(row['Asignado correo'] || row['Assigned To Email'] || row['assignedEmail'] || '').toLowerCase();
+    const assignedTo = normalizeFilterText(row['Asignado a'] || row['Assigned To'] || row['assignedTo'] || '');
+    const assignedEmail = normalizeFilterText(row['Asignado correo'] || row['Assigned To Email'] || row['assignedEmail'] || '');
     const state      = String(row['Estado']    || row['State']       || row['state']      || '').toLowerCase();
     const type       = String(row['Tipo'] || row['Type'] || '').toLowerCase();
-    const rowDate = getRowDateForFiltering(row);
+    const rowDate = getRowDateForFiltering(row, preferredDateHeader);
 
     const userMatch  = !userQuery || assignedTo.includes(userQuery) || assignedEmail.includes(userQuery);
     const stateMatch = matchesStateFilter(stateQuery, state);
@@ -2658,8 +2711,30 @@ function applyAzureFilters() {
   renderAzureTable(filtered);
 }
 
-function getRowDateForFiltering(row) {
-  const candidates = [
+function normalizeFilterText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function getRowDateForFiltering(row, preferredDateHeader = null) {
+  const candidates = [];
+
+  if (preferredDateHeader && Object.prototype.hasOwnProperty.call(row, preferredDateHeader)) {
+    candidates.push(row[preferredDateHeader]);
+  }
+
+  candidates.push(
+    row['Start Date'],
+    row['StartDate'],
+    row['Microsoft.VSTS.Scheduling.StartDate'],
+    row['Fecha Inicio'],
+    row['Inicio'],
+    row['Completed Date'],
+    row['Closed Date'],
+    row['Resolved Date'],
     row['Actualizado'],
     row['Changed Date'],
     row['ChangedDate'],
@@ -2668,7 +2743,7 @@ function getRowDateForFiltering(row) {
     row['CreatedDate'],
     row['Fecha'],
     row['Date']
-  ];
+  );
 
   for (const value of candidates) {
     const parsed = parseDateLike(value);

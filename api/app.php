@@ -21,6 +21,7 @@ function ensureApplicationInstalled(): void
     ensureDocumentGenerationSchema($pdo);
     ensureDeveloperIdentitySchema($pdo);
     ensureNotesCollaborationSchema($pdo);
+    ensureFinanceSchema($pdo);
     seedDefaultAdmin($pdo);
     seedPublicProfile($pdo);
     $isReady = true;
@@ -90,6 +91,8 @@ function runColumnMigrations(PDO $pdo): void
         // users – 2FA columns
         ['users', 'two_factor_secret',  'VARCHAR(255) DEFAULT NULL   AFTER password_hash'],
         ['users', 'two_factor_enabled', 'TINYINT(1)  NOT NULL DEFAULT 0 AFTER two_factor_secret'],
+        ['users', 'two_factor_setup_secret', 'VARCHAR(255) DEFAULT NULL AFTER two_factor_enabled'],
+        ['users', 'two_factor_setup_expires_at', 'DATETIME DEFAULT NULL AFTER two_factor_setup_secret'],
         ['users', 'profile_photo_path', 'VARCHAR(255) DEFAULT NULL   AFTER role'],
         ['users', 'last_login_at',      'DATETIME DEFAULT NULL        AFTER profile_photo_path'],
         ['users', 'last_seen_at',       'DATETIME DEFAULT NULL        AFTER last_login_at'],
@@ -140,6 +143,8 @@ function ensureTwoFactorSchemaReady(PDO $pdo): void
     $requiredColumns = [
         ['users', 'two_factor_secret'],
         ['users', 'two_factor_enabled'],
+        ['users', 'two_factor_setup_secret'],
+        ['users', 'two_factor_setup_expires_at'],
     ];
 
     $missingColumns = [];
@@ -372,31 +377,56 @@ function generateTwoFactorSecret(): string
 
 function verifyTwoFactorCode(string $secret, string $code): bool
 {
+    // Validar formato del código (6 dígitos)
     if (strlen($code) !== 6 || !ctype_digit($code)) {
         return false;
     }
 
+    // Decodificar el secret base32
     $secretKey = decodeBase32($secret);
-    if ($secretKey === null || $secretKey === '') {
+    if ($secretKey === null || strlen($secretKey) < 10) {
         return false;
     }
 
-    // TOTP: Time-based One-Time Password
+    // TOTP: Time-based One-Time Password con mayor tolerancia de tiempo
+    // Verificamos códigos para -2, -1, 0, +1, +2 períodos (±60 segundos)
     $time = (int) floor(time() / 30);
     $hmacs = [];
 
-    for ($i = -1; $i <= 1; $i++) {
-        $timestamp = pack('N2', 0, $time + $i);
-        $hmac = hash_hmac('sha1', $timestamp, $secretKey, true);
-        $offset = ord($hmac[19]) & 0xf;
-        $code_int = (ord($hmac[$offset]) & 0x7f) << 24 |
-                    (ord($hmac[$offset + 1]) & 0xff) << 16 |
-                    (ord($hmac[$offset + 2]) & 0xff) << 8 |
-                    (ord($hmac[$offset + 3]) & 0xff);
-        $hmacs[] = str_pad($code_int % 1000000, 6, '0', STR_PAD_LEFT);
+    for ($i = -2; $i <= 2; $i++) {
+        try {
+            $timestamp = pack('N2', 0, $time + $i);
+            $hmac = hash_hmac('sha1', $timestamp, $secretKey, true);
+            
+            // Asegurar que HMAC tiene 20 bytes (SHA1)
+            if (strlen($hmac) !== 20) {
+                continue;
+            }
+            
+            // Obtener offset de los últimos 4 bits del último byte
+            $offset = ord($hmac[19]) & 0xf;
+            
+            // Verificar que offset + 4 no exceda la longitud del HMAC
+            if ($offset + 4 > 20) {
+                continue;
+            }
+            
+            // Calcular el código TOTP
+            $code_int = ((ord($hmac[$offset]) & 0x7f) << 24) |
+                        ((ord($hmac[$offset + 1]) & 0xff) << 16) |
+                        ((ord($hmac[$offset + 2]) & 0xff) << 8) |
+                        (ord($hmac[$offset + 3]) & 0xff);
+            
+            $totp = str_pad($code_int % 1000000, 6, '0', STR_PAD_LEFT);
+            $hmacs[] = $totp;
+        } catch (Throwable $e) {
+            // Ignorar errores en cálculos de TOTP individuales
+            continue;
+        }
     }
 
-    return in_array($code, $hmacs, true);
+    // Verificar si el código ingresado coincide con alguno de los códigos generados
+    return count($hmacs) > 0 && in_array($code, $hmacs, true);
 }
 
 function generateTwoFactorRecoveryCodes(int $count = 8): array
@@ -685,6 +715,13 @@ function getPublicProfile(string $slug): ?array
         return null;
     }
 
+    $developerProfile = null;
+    try {
+        $developerProfile = getDeveloperIdentityProfile();
+    } catch (Throwable $_) {
+        $developerProfile = null;
+    }
+
     return [
         'slug' => (string) $profile['slug'],
         'display_name' => (string) $profile['display_name'],
@@ -693,6 +730,12 @@ function getPublicProfile(string $slug): ?array
         'bio' => $profile['bio'] ? (string) $profile['bio'] : null,
         'photo_url' => $profile['photo_path'] ? buildAssetUrl((string) $profile['photo_path']) : null,
         'photo_path' => $profile['photo_path'] ? (string) $profile['photo_path'] : null,
+        'developer_photo_url' => is_array($developerProfile) && !empty($developerProfile['photo_url'])
+            ? (string) $developerProfile['photo_url']
+            : null,
+        'developer_photo_path' => is_array($developerProfile) && !empty($developerProfile['photo_path'])
+            ? (string) $developerProfile['photo_path']
+            : null,
     ];
 }
 
@@ -977,10 +1020,33 @@ function syncPowerAutomateDailySessions(array $integration, array $payload): arr
         throw new RuntimeException('La integracion no tiene una fuente de calendario asociada.');
     }
 
-    $date = (string) ($payload['date'] ?? '');
+    $date = trim((string) ($payload['date'] ?? ''));
     $sessions = $payload['sessions'] ?? null;
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || !is_array($sessions)) {
-        throw new InvalidArgumentException('El payload debe incluir date y sessions.');
+
+    // Compatibilidad con distintos flujos de Power Automate / Teams:
+    // 1) { date, sessions[] }
+    // 2) { events[] }
+    // 3) { event: {...} }
+    if (!is_array($sessions)) {
+        $events = $payload['events'] ?? null;
+        if (is_array($events)) {
+            $sessions = $events;
+        }
+    }
+
+    if (!is_array($sessions)) {
+        $singleEvent = $payload['event'] ?? null;
+        if (is_array($singleEvent)) {
+            $sessions = [$singleEvent];
+        }
+    }
+
+    if (!is_array($sessions)) {
+        throw new InvalidArgumentException('El payload debe incluir sessions[], events[] o event.');
+    }
+
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        $date = date('Y-m-d');
     }
 
     $sourceEmail = strtolower(trim((string) ($payload['source_email'] ?? '')));
@@ -989,7 +1055,10 @@ function syncPowerAutomateDailySessions(array $integration, array $payload): arr
         throw new RuntimeException('La cuenta origen no coincide con la configurada para esta integracion.');
     }
 
-    $replaceDay = array_key_exists('replace_day', $payload) ? (bool) $payload['replace_day'] : true;
+    $isBatchDayPayload = isset($payload['sessions']) && is_array($payload['sessions']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', trim((string) ($payload['date'] ?? '')));
+    $replaceDay = array_key_exists('replace_day', $payload)
+        ? (bool) $payload['replace_day']
+        : (bool) $isBatchDayPayload;
     $dayStart = $date . ' 00:00:00';
     $dayEnd = $date . ' 23:59:59';
 
@@ -1007,6 +1076,8 @@ function syncPowerAutomateDailySessions(array $integration, array $payload): arr
         }
 
         $insert = $pdo->prepare('INSERT INTO calendar_events (user_id, source_id, external_event_id, title, description, start_at, end_at, location, meeting_url, source_type) VALUES (:user_id, :source_id, :external_event_id, :title, :description, :start_at, :end_at, :location, :meeting_url, :source_type)');
+        $findExistingByExternalId = $pdo->prepare('SELECT id FROM calendar_events WHERE user_id = :user_id AND source_id = :source_id AND external_event_id = :external_event_id LIMIT 1');
+        $updateExisting = $pdo->prepare('UPDATE calendar_events SET title = :title, description = :description, start_at = :start_at, end_at = :end_at, location = :location, meeting_url = :meeting_url, source_type = :source_type WHERE id = :id AND user_id = :user_id');
 
         $storedSessions = 0;
         $teamsSessions = 0;
@@ -1017,9 +1088,20 @@ function syncPowerAutomateDailySessions(array $integration, array $payload): arr
                 continue;
             }
 
-            $title = trim((string) ($session['title'] ?? ''));
-            $startValue = trim((string) ($session['start_at'] ?? $session['start'] ?? ''));
-            $endValue = trim((string) ($session['end_at'] ?? $session['end'] ?? ''));
+            $title = trim((string) ($session['title'] ?? $session['subject'] ?? ''));
+
+            $rawStart = $session['start_at'] ?? $session['start'] ?? '';
+            $rawEnd = $session['end_at'] ?? $session['end'] ?? '';
+
+            if (is_array($rawStart)) {
+                $rawStart = $rawStart['dateTime'] ?? $rawStart['date'] ?? '';
+            }
+            if (is_array($rawEnd)) {
+                $rawEnd = $rawEnd['dateTime'] ?? $rawEnd['date'] ?? '';
+            }
+
+            $startValue = trim((string) $rawStart);
+            $endValue = trim((string) $rawEnd);
 
             if ($title === '' || $startValue === '' || $endValue === '') {
                 continue;
@@ -1031,21 +1113,70 @@ function syncPowerAutomateDailySessions(array $integration, array $payload): arr
                 continue;
             }
 
-            $isTeamsSession = detectTeamsSession($session);
+            $locationValue = $session['location'] ?? null;
+            if (is_array($locationValue)) {
+                $locationValue = $locationValue['displayName'] ?? '';
+            }
+
+            $meetingUrl = trim((string) (
+                $session['meeting_url']
+                ?? $session['join_url']
+                ?? ($session['onlineMeeting']['joinUrl'] ?? '')
+                ?? ($session['online_meeting']['joinUrl'] ?? '')
+                ?? ($session['webLink'] ?? '')
+            ));
+
+            $sessionForDetection = $session;
+            $sessionForDetection['meeting_url'] = $meetingUrl;
+            if (!isset($sessionForDetection['online_meeting_provider']) && isset($session['onlineMeetingProvider'])) {
+                $sessionForDetection['online_meeting_provider'] = $session['onlineMeetingProvider'];
+            }
+
+            $isTeamsSession = detectTeamsSession($sessionForDetection);
             $sourceType = $isTeamsSession ? 'power_automate_teams' : 'power_automate';
 
-            $insert->execute([
+            $externalEventId = trim((string) ($session['external_event_id'] ?? $session['id'] ?? ''));
+            $insertParams = [
                 'user_id' => (int) $integration['user_id'],
                 'source_id' => $sourceId,
-                'external_event_id' => trim((string) ($session['external_event_id'] ?? $session['id'] ?? '')) ?: null,
+                'external_event_id' => $externalEventId !== '' ? $externalEventId : null,
                 'title' => $title,
                 'description' => trim((string) ($session['description'] ?? '')) ?: null,
                 'start_at' => $startAt,
                 'end_at' => $endAt,
-                'location' => trim((string) ($session['location'] ?? '')) ?: null,
-                'meeting_url' => trim((string) ($session['meeting_url'] ?? $session['join_url'] ?? '')) ?: null,
+                'location' => trim((string) ($locationValue ?? '')) ?: null,
+                'meeting_url' => $meetingUrl !== '' ? $meetingUrl : null,
                 'source_type' => $sourceType,
-            ]);
+            ];
+
+            $updated = false;
+            if ($externalEventId !== '') {
+                $findExistingByExternalId->execute([
+                    'user_id' => (int) $integration['user_id'],
+                    'source_id' => $sourceId,
+                    'external_event_id' => $externalEventId,
+                ]);
+                $existingId = (int) ($findExistingByExternalId->fetchColumn() ?: 0);
+
+                if ($existingId > 0) {
+                    $updateExisting->execute([
+                        'id' => $existingId,
+                        'user_id' => (int) $integration['user_id'],
+                        'title' => $insertParams['title'],
+                        'description' => $insertParams['description'],
+                        'start_at' => $insertParams['start_at'],
+                        'end_at' => $insertParams['end_at'],
+                        'location' => $insertParams['location'],
+                        'meeting_url' => $insertParams['meeting_url'],
+                        'source_type' => $insertParams['source_type'],
+                    ]);
+                    $updated = true;
+                }
+            }
+
+            if (!$updated) {
+                $insert->execute($insertParams);
+            }
 
             $storedSessions++;
 
@@ -1373,6 +1504,143 @@ function ensureNotesCollaborationSchema(PDO $pdo): void
             CONSTRAINT fk_note_shares_note FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
             CONSTRAINT fk_note_shares_owner FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
             CONSTRAINT fk_note_shares_invited_user FOREIGN KEY (invited_user_id) REFERENCES users(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+}
+
+function ensureFinanceSchema(PDO $pdo): void
+{
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS finance_movements (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            movement_type ENUM("income","expense","investment","tax") NOT NULL,
+            amount DECIMAL(14,2) NOT NULL,
+            currency_code CHAR(3) NOT NULL DEFAULT "COP",
+            category VARCHAR(120) DEFAULT NULL,
+            description TEXT DEFAULT NULL,
+            movement_date DATE NOT NULL,
+            source_channel VARCHAR(80) DEFAULT NULL,
+            legal_support_doc VARCHAR(255) DEFAULT NULL,
+            metadata JSON DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_fin_mov_user_date (user_id, movement_date),
+            KEY idx_fin_mov_type_date (movement_type, movement_date),
+            CONSTRAINT fk_fin_mov_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS finance_budgets (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            budget_period ENUM("monthly","quarterly","yearly") NOT NULL DEFAULT "monthly",
+            period_key VARCHAR(20) NOT NULL,
+            category VARCHAR(120) NOT NULL,
+            target_amount DECIMAL(14,2) NOT NULL,
+            currency_code CHAR(3) NOT NULL DEFAULT "COP",
+            notes TEXT DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_fin_budget_scope (user_id, budget_period, period_key, category),
+            KEY idx_fin_budget_user_period (user_id, budget_period, period_key),
+            CONSTRAINT fk_fin_budget_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS finance_savings_goals (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            title VARCHAR(160) NOT NULL,
+            target_amount DECIMAL(14,2) NOT NULL,
+            current_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+            target_date DATE DEFAULT NULL,
+            status ENUM("active","paused","completed") NOT NULL DEFAULT "active",
+            priority ENUM("low","medium","high") NOT NULL DEFAULT "medium",
+            notes TEXT DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_fin_goal_user_status (user_id, status),
+            CONSTRAINT fk_fin_goal_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS finance_investments (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            asset_type ENUM("fixed_income","equity","fund","crypto","real_estate","other") NOT NULL DEFAULT "other",
+            asset_name VARCHAR(180) NOT NULL,
+            broker_or_entity VARCHAR(160) DEFAULT NULL,
+            invested_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+            current_value DECIMAL(14,2) NOT NULL DEFAULT 0,
+            annual_expected_return DECIMAL(7,4) DEFAULT NULL,
+            risk_profile ENUM("conservative","moderate","aggressive") NOT NULL DEFAULT "moderate",
+            start_date DATE DEFAULT NULL,
+            status ENUM("active","closed") NOT NULL DEFAULT "active",
+            notes TEXT DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_fin_invest_user_status (user_id, status),
+            CONSTRAINT fk_fin_invest_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS finance_tax_records (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            tax_year SMALLINT UNSIGNED NOT NULL,
+            tax_type ENUM("renta","iva","retefuente","ica","other") NOT NULL DEFAULT "renta",
+            taxable_base DECIMAL(14,2) NOT NULL DEFAULT 0,
+            estimated_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+            declared_amount DECIMAL(14,2) DEFAULT NULL,
+            paid_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+            due_date DATE DEFAULT NULL,
+            status ENUM("planned","declared","paid","overdue") NOT NULL DEFAULT "planned",
+            authority VARCHAR(80) NOT NULL DEFAULT "DIAN",
+            notes TEXT DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            KEY idx_fin_tax_user_year (user_id, tax_year),
+            KEY idx_fin_tax_due_status (due_date, status),
+            CONSTRAINT fk_fin_tax_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS finance_monthly_snapshots (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            month_key CHAR(7) NOT NULL,
+            income_total DECIMAL(14,2) NOT NULL DEFAULT 0,
+            expense_total DECIMAL(14,2) NOT NULL DEFAULT 0,
+            investment_total DECIMAL(14,2) NOT NULL DEFAULT 0,
+            tax_total DECIMAL(14,2) NOT NULL DEFAULT 0,
+            savings_total DECIMAL(14,2) NOT NULL DEFAULT 0,
+            savings_rate_percent DECIMAL(7,3) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_fin_snapshot_month (user_id, month_key),
+            CONSTRAINT fk_fin_snapshot_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS finance_simulation_history (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            simulator_type ENUM("compound_interest","home_capacity","leasing_vs_credit","tax_burden") NOT NULL,
+            input_payload JSON NOT NULL,
+            result_payload JSON NOT NULL,
+            result_summary TEXT NOT NULL,
+            simulated_at DATETIME NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_fin_sim_user_date (user_id, simulated_at),
+            KEY idx_fin_sim_type_date (simulator_type, simulated_at),
+            CONSTRAINT fk_fin_sim_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
 }

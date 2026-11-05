@@ -188,6 +188,7 @@ $rows = array_map(static function (array $wi): array {
         'Estado' => (string) ($fields['System.State'] ?? ''),
         'Asignado a' => $assignedTo,
         'Asignado correo' => $assignedEmail,
+        'Start Date' => (string) ($fields['Microsoft.VSTS.Scheduling.StartDate'] ?? ''),
         'Creado' => (string) ($fields['System.CreatedDate'] ?? ''),
         'Actualizado' => (string) ($fields['System.ChangedDate'] ?? ''),
         'Estimacion Original' => (float) ($fields['Microsoft.VSTS.Scheduling.OriginalEstimate'] ?? 0),

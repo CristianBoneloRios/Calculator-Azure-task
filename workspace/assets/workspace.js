@@ -20,6 +20,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (workspacePage === 'goals') {
     initGoalsPage();
   }
+  if (workspacePage === 'finanzas') {
+    initFinancePage();
+  }
   if (workspacePage === 'calendar') {
     initCalendarPage();
   }
@@ -62,10 +65,11 @@ const summaryModuleMeta = {
 async function apiRequest(action, options = {}) {
   // En desarrollo (localhost), usar mock-dashboard.php
   const apiFile = window.location.hostname === 'localhost' ? 'mock-dashboard.php' : 'dashboard.php';
+  const headers = options.headers || (options.isFormData ? {} : { 'Content-Type': 'application/json' });
   const response = await fetch(`../api/${apiFile}?action=${encodeURIComponent(action)}`, {
     method: options.method || 'GET',
     credentials: 'same-origin',
-    headers: options.isFormData ? {} : { 'Content-Type': 'application/json' },
+    headers,
     body: options.body || null,
   });
 
@@ -170,6 +174,176 @@ function renderList(container, items, template, emptyMessage) {
   }
 
   container.innerHTML = items.map(template).join('');
+}
+
+function formatCop(value) {
+  const amount = Number(value) || 0;
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0
+  }).format(amount);
+}
+
+async function initFinancePage() {
+  const form = document.getElementById('financeCashflowForm');
+  const typeInput = document.getElementById('financeType');
+  const amountInput = document.getElementById('financeAmount');
+  const categoryInput = document.getElementById('financeCategory');
+  const dateInput = document.getElementById('financeDate');
+  const descriptionInput = document.getElementById('financeDescription');
+  const list = document.getElementById('financeMovementsList');
+
+  const incomeEl = document.getElementById('financeIncomeValue');
+  const expenseEl = document.getElementById('financeExpenseValue');
+  const investEl = document.getElementById('financeInvestmentValue');
+  const taxEl = document.getElementById('financeTaxValue');
+  const netWorthEl = document.getElementById('financeNetWorthValue');
+
+  const heroKpiWrap = document.getElementById('financeHeroKpis');
+
+  if (!form || !list) {
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (dateInput && !dateInput.value) {
+    dateInput.value = today;
+  }
+
+  const state = {
+    rows: []
+  };
+
+  initFinanceCalculators();
+
+  const updateSummary = summary => {
+    const totals = summary || state.rows.reduce((acc, row) => {
+      const amount = Number(row.amount) || 0;
+      if (row.type === 'income') acc.income += amount;
+      if (row.type === 'expense') acc.expense += amount;
+      if (row.type === 'investment') acc.investment += amount;
+      if (row.type === 'tax') acc.tax += amount;
+      return acc;
+    }, { income: 0, expense: 0, investment: 0, tax: 0, net: 0, savings_rate: 0 });
+
+    const net = Number.isFinite(totals.net) ? totals.net : (totals.income - totals.expense - totals.investment - totals.tax);
+    const savingsRate = Number.isFinite(totals.savings_rate)
+      ? totals.savings_rate
+      : (totals.income > 0 ? Math.max(0, ((net / totals.income) * 100)) : 0);
+
+    if (incomeEl) incomeEl.textContent = formatCop(totals.income);
+    if (expenseEl) expenseEl.textContent = formatCop(totals.expense);
+    if (investEl) investEl.textContent = formatCop(totals.investment);
+    if (taxEl) taxEl.textContent = formatCop(totals.tax);
+    if (netWorthEl) netWorthEl.textContent = formatCop(net);
+
+    if (heroKpiWrap) {
+      heroKpiWrap.innerHTML = `
+        <span class="finance-kpi-pill"><i class="fas fa-piggy-bank"></i> Ahorro mensual: ${formatCop(net)}</span>
+        <span class="finance-kpi-pill"><i class="fas fa-wallet"></i> Flujo neto: ${formatCop(net)}</span>
+        <span class="finance-kpi-pill"><i class="fas fa-percent"></i> Tasa de ahorro: ${savingsRate.toFixed(1)}%</span>`;
+    }
+  };
+
+  const renderMovements = () => {
+    if (state.rows.length === 0) {
+      list.innerHTML = '<div class="workspace-empty">Aun no hay movimientos. Registra ingresos y gastos para activar el asistente financiero.</div>';
+      return;
+    }
+
+    list.innerHTML = state.rows
+      .slice()
+      .reverse()
+      .map(row => {
+        const labels = {
+          income: 'Ingreso',
+          expense: 'Gasto',
+          investment: 'Inversion',
+          tax: 'Impuesto'
+        };
+
+        const accents = {
+          income: 'summary-stat-green',
+          expense: 'summary-stat-yellow',
+          investment: 'summary-stat-blue',
+          tax: 'summary-stat-yellow'
+        };
+
+        return `
+          <div class="workspace-list-item finance-movement-item">
+            <div>
+              <strong>${row.category || labels[row.type]}</strong>
+              <p>${row.date} · ${labels[row.type]} · ${row.description || 'Sin detalle adicional'}</p>
+            </div>
+            <span class="workspace-tag ${accents[row.type]}">${formatCop(row.amount)}</span>
+          </div>`;
+      }).join('');
+  };
+
+  const loadFromBackend = async () => {
+    const data = await apiRequest('finance_list');
+    state.rows = Array.isArray(data.movements)
+      ? data.movements.map(item => ({
+          id: Number(item.id || 0),
+          type: String(item.movement_type || 'income'),
+          amount: Number(item.amount || 0),
+          category: String(item.category || ''),
+          date: String(item.movement_date || ''),
+          description: String(item.description || ''),
+        }))
+      : [];
+
+    renderMovements();
+    updateSummary(data.summary || null);
+  };
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+
+    const type = String(typeInput?.value || 'income').trim();
+    const amount = Number(amountInput?.value || 0);
+    const category = String(categoryInput?.value || '').trim();
+    const date = String(dateInput?.value || today).trim();
+    const description = String(descriptionInput?.value || '').trim();
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showWorkspaceToast('Ingresa un monto valido mayor a cero.', 'warning');
+      amountInput?.focus();
+      return;
+    }
+
+    try {
+      await apiRequest('finance_save', {
+        method: 'POST',
+        body: JSON.stringify({
+          type,
+          amount,
+          category,
+          date,
+          description,
+        }),
+      });
+
+      form.reset();
+      if (dateInput) {
+        dateInput.value = today;
+      }
+
+      await loadFromBackend();
+      showWorkspaceToast('Movimiento financiero registrado en base de datos.', 'success');
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  try {
+    await loadFromBackend();
+  } catch (error) {
+    showWorkspaceToast(error.message, 'danger');
+    renderMovements();
+    updateSummary();
+  }
 }
 
 async function initDocumentGenerationPage() {
@@ -1121,9 +1295,15 @@ async function initProfilePage() {
     }
 
     try {
+      const body = new URLSearchParams();
+      body.set('code', code);
+
       const result = await apiRequest('profile_2fa_enable', {
         method: 'POST',
-        body: JSON.stringify({ code }),
+        body,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
       });
 
       set2FAVisualState(Boolean(result.user?.two_factor_enabled));
@@ -1844,6 +2024,9 @@ async function initCalendarPage() {
   let activeDayEl = null;
   let allEvents = [];
   let isPAConfigured = false;
+  let lastPowerAutomateSyncAt = '';
+
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   const setSyncStatus = (message, variant = 'neutral', isLoading = false) => {
     if (!calSyncStatus) return;
@@ -2269,17 +2452,28 @@ async function initCalendarPage() {
         body: JSON.stringify({}),
       });
 
-      setSyncStatus(result.message || 'Solicitud enviada. Esperando eventos...', 'success', false);
+      setSyncStatus(result.message || 'Solicitud enviada. Esperando eventos...', 'success', true);
       showWorkspaceToast(result.message || 'Solicitud de sincronizacion enviada.', 'success');
 
-      setTimeout(async () => {
-        try {
-          await load();
-          setSyncStatus('Sincronizacion completada. Datos actualizados.', 'success', false);
-        } catch (error) {
-          setSyncStatus('No se pudo refrescar despues de sincronizar.', 'error', false);
+      let synced = false;
+      const previousSyncAt = lastPowerAutomateSyncAt;
+      for (let attempt = 1; attempt <= 6; attempt++) {
+        await wait(2000);
+        await load();
+
+        if (lastPowerAutomateSyncAt && lastPowerAutomateSyncAt !== previousSyncAt) {
+          synced = true;
+          break;
         }
-      }, 1500);
+
+        setSyncStatus(`Esperando respuesta de Power Automate... intento ${attempt}/6`, 'neutral', true);
+      }
+
+      if (synced) {
+        setSyncStatus('Sincronizacion completada. Datos actualizados.', 'success', false);
+      } else {
+        setSyncStatus('No se detectaron cambios aun. Verifica que el flujo de Power Automate envie eventos al webhook.', 'error', false);
+      }
     } catch (error) {
       setSyncStatus(error.message || 'Error al sincronizar con Power Automate.', 'error', false);
       showWorkspaceToast(error.message || 'Error al sincronizar.', 'danger');
@@ -2310,6 +2504,7 @@ async function initCalendarPage() {
     renderAgenda();
 
     renderPowerAutomateConfig(data.power_automate);
+    lastPowerAutomateSyncAt = String(data.power_automate?.last_synced_at || '');
 
     if (teamsTodaySummary) {
       teamsTodaySummary.textContent = data.teams_today && data.teams_today.sessions > 0
@@ -2434,5 +2629,516 @@ function initSummaryModuleModal() {
     if (event.key === 'Escape' && !backdrop.hidden) {
       closeModal();
     }
+  });
+}
+
+function initFinanceCalculators() {
+  const historyList = document.getElementById('financeSimulationHistoryList');
+  const typeFilterInput = document.getElementById('financeSimTypeFilter');
+  const fromDateInput = document.getElementById('financeSimDateFrom');
+  const toDateInput = document.getElementById('financeSimDateTo');
+  const applyFilterBtn = document.getElementById('financeSimApplyFilterBtn');
+  const clearFilterBtn = document.getElementById('financeSimClearFilterBtn');
+  const purgeDaysInput = document.getElementById('financeSimPurgeDays');
+  const purgeBtn = document.getElementById('financeSimPurgeBtn');
+  const pageSizeInput = document.getElementById('financeSimPageSize');
+  const prevPageBtn = document.getElementById('financeSimPrevPageBtn');
+  const nextPageBtn = document.getElementById('financeSimNextPageBtn');
+  const pageInfo = document.getElementById('financeSimPageInfo');
+
+  const historyPagination = {
+    page: 1,
+    page_size: Math.max(1, Number(pageSizeInput?.value || 20)),
+    total: 0,
+    total_pages: 1,
+    has_prev: false,
+    has_next: false,
+  };
+
+  const historyFilters = {
+    simulator_type: '',
+    from_date: '',
+    to_date: '',
+    limit: 180,
+  };
+
+  const lastSimulationByType = {
+    compound_interest: null,
+    home_capacity: null,
+    leasing_vs_credit: null,
+    tax_burden: null,
+  };
+
+  const simulatorLabels = {
+    compound_interest: 'Interes compuesto',
+    home_capacity: 'Capacidad de vivienda',
+    leasing_vs_credit: 'Leasing vs credito',
+    tax_burden: 'Carga tributaria',
+  };
+
+  const toNumber = value => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const toMonthlyRateFromEA = annualEffectivePercent => {
+    const annual = Math.max(0, toNumber(annualEffectivePercent)) / 100;
+    if (annual <= 0) return 0;
+    return Math.pow(1 + annual, 1 / 12) - 1;
+  };
+
+  const safeQuery = id => document.getElementById(id);
+
+  const setResult = (id, html) => {
+    const node = safeQuery(id);
+    if (!node) return;
+    node.innerHTML = html;
+  };
+
+  const downloadBase64File = (base64, fileName, mimeType) => {
+    if (!base64) return;
+    const link = document.createElement('a');
+    link.href = `data:${mimeType || 'application/pdf'};base64,${base64}`;
+    link.download = fileName || `reporte-${Date.now()}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const renderHistory = rows => {
+    if (!historyList) return;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      historyList.innerHTML = '<div class="workspace-empty">Aun no hay simulaciones guardadas. Ejecuta una calculadora para crear historial.</div>';
+      return;
+    }
+
+    historyList.innerHTML = rows
+      .map(row => {
+        const type = String(row.simulator_type || '');
+        const label = simulatorLabels[type] || type;
+        const summary = String(row.result_summary || 'Sin resumen.');
+        const date = String(row.simulated_at || '').replace('T', ' ').slice(0, 19) || '-';
+        return `
+          <div class="workspace-list-item">
+            <div class="finance-history-row">
+              <div>
+                <strong>${label}</strong>
+                <p>${date} · ${summary}</p>
+              </div>
+              <button type="button" class="finance-history-delete" data-sim-id="${Number(row.id || 0)}" title="Eliminar del historial">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>`;
+      })
+      .join('');
+  };
+
+  const renderPagination = () => {
+    if (pageInfo) {
+      pageInfo.textContent = `Pagina ${historyPagination.page} de ${historyPagination.total_pages} · ${historyPagination.total} registros`;
+    }
+    if (prevPageBtn) {
+      prevPageBtn.disabled = !historyPagination.has_prev;
+    }
+    if (nextPageBtn) {
+      nextPageBtn.disabled = !historyPagination.has_next;
+    }
+  };
+
+  const loadHistory = async (customFilters = null) => {
+    if (customFilters && typeof customFilters === 'object') {
+      Object.assign(historyFilters, customFilters);
+    }
+
+    historyPagination.page_size = Math.max(1, Number(pageSizeInput?.value || historyPagination.page_size || 20));
+
+    const data = await apiRequest('finance_simulation_list', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...historyFilters,
+        page: historyPagination.page,
+        page_size: historyPagination.page_size,
+      }),
+    });
+    const rows = Array.isArray(data.simulations) ? data.simulations : [];
+    const pagination = data.pagination && typeof data.pagination === 'object' ? data.pagination : null;
+
+    if (pagination) {
+      historyPagination.page = Math.max(1, Number(pagination.page || historyPagination.page));
+      historyPagination.page_size = Math.max(1, Number(pagination.page_size || historyPagination.page_size));
+      historyPagination.total = Math.max(0, Number(pagination.total || 0));
+      historyPagination.total_pages = Math.max(1, Number(pagination.total_pages || 1));
+      historyPagination.has_prev = Boolean(pagination.has_prev);
+      historyPagination.has_next = Boolean(pagination.has_next);
+    }
+
+    Object.keys(lastSimulationByType).forEach(type => {
+      lastSimulationByType[type] = null;
+    });
+
+    rows.forEach(row => {
+      const type = String(row.simulator_type || '');
+      if (!lastSimulationByType[type]) {
+        lastSimulationByType[type] = row;
+      }
+    });
+    renderHistory(rows);
+    renderPagination();
+  };
+
+  const saveSimulation = async ({ simulatorType, inputPayload, resultPayload, resultSummary }) => {
+    const payload = {
+      simulator_type: simulatorType,
+      input_payload: inputPayload,
+      result_payload: resultPayload,
+      result_summary: resultSummary,
+      simulated_at: new Date().toISOString(),
+    };
+
+    const data = await apiRequest('finance_simulation_save', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (data && data.simulation) {
+      lastSimulationByType[simulatorType] = data.simulation;
+    }
+
+    await loadHistory();
+  };
+
+  const exportSimulationPdf = async simulatorType => {
+    const simulation = lastSimulationByType[simulatorType];
+    if (!simulation) {
+      showWorkspaceToast('Primero ejecuta el simulador para generar un resultado.', 'warning');
+      return;
+    }
+
+    const data = await apiRequest('finance_simulation_export_pdf', {
+      method: 'POST',
+      body: JSON.stringify({
+        simulation_id: Number(simulation.id || 0),
+        simulator_type: simulatorType,
+        input_payload: simulation.input_payload || {},
+        result_payload: simulation.result_payload || {},
+        result_summary: simulation.result_summary || '',
+        simulated_at: simulation.simulated_at || new Date().toISOString(),
+      }),
+    });
+
+    downloadBase64File(data.file_base64, data.file_name, data.mime_type);
+    showWorkspaceToast('PDF generado y descargado.', 'success');
+  };
+
+  const on = (id, callback) => {
+    const node = safeQuery(id);
+    if (!node) return;
+    node.addEventListener('click', callback);
+  };
+
+  on('calcCompoundBtn', async () => {
+    const initial = Math.max(0, toNumber(safeQuery('calcCompoundInitial')?.value));
+    const monthlyContribution = Math.max(0, toNumber(safeQuery('calcCompoundMonthly')?.value));
+    const annualRate = Math.max(0, toNumber(safeQuery('calcCompoundRate')?.value));
+    const years = Math.max(1, toNumber(safeQuery('calcCompoundYears')?.value));
+
+    if (initial <= 0 && monthlyContribution <= 0) {
+      setResult('calcCompoundResult', 'Ingresa capital inicial o aporte mensual para simular.');
+      return;
+    }
+
+    const r = toMonthlyRateFromEA(annualRate);
+    const n = Math.max(1, Math.round(years * 12));
+    const futureInitial = initial * Math.pow(1 + r, n);
+    const futureContributions = r > 0
+      ? monthlyContribution * ((Math.pow(1 + r, n) - 1) / r)
+      : monthlyContribution * n;
+    const futureValue = futureInitial + futureContributions;
+    const totalInvested = initial + (monthlyContribution * n);
+    const profit = futureValue - totalInvested;
+    const resultSummary = `Capital proyectado ${formatCop(futureValue)} y ganancia estimada ${formatCop(profit)} en ${years} anos.`;
+
+    setResult(
+      'calcCompoundResult',
+      `<strong>Capital proyectado:</strong> ${formatCop(futureValue)}<br><strong>Ganancia estimada:</strong> ${formatCop(profit)} en ${years} anos.`
+    );
+
+    try {
+      await saveSimulation({
+        simulatorType: 'compound_interest',
+        inputPayload: { initial, monthlyContribution, annualRate, years },
+        resultPayload: { futureValue, totalInvested, profit, months: n },
+        resultSummary,
+      });
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  on('calcHomeBtn', async () => {
+    const income = Math.max(0, toNumber(safeQuery('calcHomeIncome')?.value));
+    const debts = Math.max(0, toNumber(safeQuery('calcHomeDebts')?.value));
+    const annualRate = Math.max(0, toNumber(safeQuery('calcHomeRate')?.value));
+    const years = Math.max(1, toNumber(safeQuery('calcHomeYears')?.value));
+    const quotaPct = Math.max(5, toNumber(safeQuery('calcHomeQuotaPct')?.value || 30));
+    const downPct = Math.min(80, Math.max(0, toNumber(safeQuery('calcHomeDownPct')?.value || 30)));
+
+    if (income <= 0) {
+      setResult('calcHomeResult', 'Ingresa tu ingreso mensual para estimar capacidad.');
+      return;
+    }
+
+    const maxQuota = Math.max(0, (income * (quotaPct / 100)) - debts);
+    if (maxQuota <= 0) {
+      setResult('calcHomeResult', 'Tu endeudamiento actual consume el cupo disponible de cuota.');
+      return;
+    }
+
+    const r = toMonthlyRateFromEA(annualRate);
+    const n = Math.max(1, Math.round(years * 12));
+    const maxCredit = r > 0
+      ? maxQuota * ((1 - Math.pow(1 + r, -n)) / r)
+      : maxQuota * n;
+
+    const financedRatio = Math.max(0.05, 1 - (downPct / 100));
+    const estimatedProperty = maxCredit / financedRatio;
+    const downPayment = estimatedProperty * (downPct / 100);
+    const resultSummary = `Cuota sostenible ${formatCop(maxQuota)} y vivienda estimada ${formatCop(estimatedProperty)}.`;
+
+    setResult(
+      'calcHomeResult',
+      `<strong>Cuota sostenible:</strong> ${formatCop(maxQuota)} / mes<br><strong>Vivienda estimada:</strong> ${formatCop(estimatedProperty)}<br><strong>Cuota inicial sugerida:</strong> ${formatCop(downPayment)}.`
+    );
+
+    try {
+      await saveSimulation({
+        simulatorType: 'home_capacity',
+        inputPayload: { income, debts, annualRate, years, quotaPct, downPct },
+        resultPayload: { maxQuota, maxCredit, estimatedProperty, downPayment, months: n },
+        resultSummary,
+      });
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  on('calcLeaseBtn', async () => {
+    const amount = Math.max(0, toNumber(safeQuery('calcLoanAmount')?.value));
+    const months = Math.max(1, Math.round(toNumber(safeQuery('calcLoanMonths')?.value)));
+    const loanRateEA = Math.max(0, toNumber(safeQuery('calcLoanRate')?.value));
+    const leaseRateEA = Math.max(0, toNumber(safeQuery('calcLeaseRate')?.value));
+    const residualPct = Math.min(70, Math.max(0, toNumber(safeQuery('calcLeaseResidual')?.value || 10)));
+
+    if (amount <= 0) {
+      setResult('calcLeaseResult', 'Ingresa el monto a financiar para comparar opciones.');
+      return;
+    }
+
+    const loanR = toMonthlyRateFromEA(loanRateEA);
+    const leaseR = toMonthlyRateFromEA(leaseRateEA);
+    const residual = amount * (residualPct / 100);
+
+    const loanPayment = loanR > 0
+      ? amount * (loanR / (1 - Math.pow(1 + loanR, -months)))
+      : amount / months;
+    const loanTotal = loanPayment * months;
+
+    const leasePayment = leaseR > 0
+      ? (amount - (residual / Math.pow(1 + leaseR, months))) * (leaseR / (1 - Math.pow(1 + leaseR, -months)))
+      : (amount - residual) / months;
+    const leaseTotal = (leasePayment * months) + residual;
+
+    const better = loanTotal <= leaseTotal ? 'Credito' : 'Leasing';
+    const savings = Math.abs(loanTotal - leaseTotal);
+    const resultSummary = `Comparacion completada: mejor opcion ${better}, diferencia ${formatCop(savings)}.`;
+
+    setResult(
+      'calcLeaseResult',
+      `<strong>Cuota credito:</strong> ${formatCop(loanPayment)} / mes · <strong>Total:</strong> ${formatCop(loanTotal)}<br><strong>Cuota leasing:</strong> ${formatCop(leasePayment)} / mes + residual ${formatCop(residual)} · <strong>Total:</strong> ${formatCop(leaseTotal)}<br><strong>Mejor opcion:</strong> ${better} (diferencia ${formatCop(savings)}).`
+    );
+
+    try {
+      await saveSimulation({
+        simulatorType: 'leasing_vs_credit',
+        inputPayload: { amount, months, loanRateEA, leaseRateEA, residualPct },
+        resultPayload: { loanPayment, loanTotal, leasePayment, leaseTotal, residual, better, savings },
+        resultSummary,
+      });
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  on('calcTaxBtn', async () => {
+    const income = Math.max(0, toNumber(safeQuery('calcTaxIncome')?.value));
+    const costs = Math.max(0, toNumber(safeQuery('calcTaxCosts')?.value));
+    const retePct = Math.max(0, toNumber(safeQuery('calcTaxRete')?.value || 6));
+    const securityPct = Math.max(0, toNumber(safeQuery('calcTaxSecurity')?.value || 28.5));
+
+    if (income <= 0) {
+      setResult('calcTaxResult', 'Ingresa el valor de ingresos mensuales para estimar carga.');
+      return;
+    }
+
+    const taxBase = Math.max(0, income - costs);
+    const rete = income * (retePct / 100);
+    const ibc = income * 0.4;
+    const socialSecurity = ibc * (securityPct / 100);
+    const totalBurden = rete + socialSecurity;
+    const netAfterBurden = income - totalBurden;
+    const resultSummary = `Carga total estimada ${formatCop(totalBurden)} e ingreso neto ${formatCop(netAfterBurden)}.`;
+
+    setResult(
+      'calcTaxResult',
+      `<strong>Base despues de costos:</strong> ${formatCop(taxBase)}<br><strong>Retencion estimada:</strong> ${formatCop(rete)} · <strong>Seguridad social:</strong> ${formatCop(socialSecurity)}<br><strong>Carga total aprox:</strong> ${formatCop(totalBurden)} · <strong>Ingreso neto:</strong> ${formatCop(netAfterBurden)}.`
+    );
+
+    try {
+      await saveSimulation({
+        simulatorType: 'tax_burden',
+        inputPayload: { income, costs, retePct, securityPct },
+        resultPayload: { taxBase, rete, ibc, socialSecurity, totalBurden, netAfterBurden },
+        resultSummary,
+      });
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  on('calcCompoundExportBtn', async () => {
+    try {
+      await exportSimulationPdf('compound_interest');
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  on('calcHomeExportBtn', async () => {
+    try {
+      await exportSimulationPdf('home_capacity');
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  on('calcLeaseExportBtn', async () => {
+    try {
+      await exportSimulationPdf('leasing_vs_credit');
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  on('calcTaxExportBtn', async () => {
+    try {
+      await exportSimulationPdf('tax_burden');
+    } catch (error) {
+      showWorkspaceToast(error.message, 'danger');
+    }
+  });
+
+  if (applyFilterBtn) {
+    applyFilterBtn.addEventListener('click', () => {
+      historyPagination.page = 1;
+      loadHistory({
+        simulator_type: String(typeFilterInput?.value || '').trim(),
+        from_date: String(fromDateInput?.value || '').trim(),
+        to_date: String(toDateInput?.value || '').trim(),
+      }).catch(error => {
+        showWorkspaceToast(error.message, 'danger');
+      });
+    });
+  }
+
+  if (clearFilterBtn) {
+    clearFilterBtn.addEventListener('click', () => {
+      if (typeFilterInput) typeFilterInput.value = '';
+      if (fromDateInput) fromDateInput.value = '';
+      if (toDateInput) toDateInput.value = '';
+      historyPagination.page = 1;
+      loadHistory({
+        simulator_type: '',
+        from_date: '',
+        to_date: '',
+      }).catch(error => {
+        showWorkspaceToast(error.message, 'danger');
+      });
+    });
+  }
+
+  if (purgeBtn) {
+    purgeBtn.addEventListener('click', async () => {
+      const days = Math.max(7, Number(purgeDaysInput?.value || 90));
+      try {
+        const data = await apiRequest('finance_simulation_purge', {
+          method: 'POST',
+          body: JSON.stringify({ older_than_days: days }),
+        });
+        historyPagination.page = 1;
+        await loadHistory();
+        showWorkspaceToast(`Limpieza completada. Registros eliminados: ${Number(data.deleted_count || 0)}.`, 'success');
+      } catch (error) {
+        showWorkspaceToast(error.message, 'danger');
+      }
+    });
+  }
+
+  if (historyList) {
+    historyList.addEventListener('click', async event => {
+      const target = event.target instanceof Element ? event.target.closest('[data-sim-id]') : null;
+      if (!target) {
+        return;
+      }
+
+      const simulationId = Number(target.getAttribute('data-sim-id') || 0);
+      if (simulationId <= 0) {
+        return;
+      }
+
+      try {
+        await apiRequest('finance_simulation_delete', {
+          method: 'POST',
+          body: JSON.stringify({ simulation_id: simulationId }),
+        });
+        await loadHistory();
+        showWorkspaceToast('Simulacion eliminada.', 'success');
+      } catch (error) {
+        showWorkspaceToast(error.message, 'danger');
+      }
+    });
+  }
+
+  if (pageSizeInput) {
+    pageSizeInput.addEventListener('change', () => {
+      historyPagination.page = 1;
+      loadHistory().catch(error => {
+        showWorkspaceToast(error.message, 'danger');
+      });
+    });
+  }
+
+  if (prevPageBtn) {
+    prevPageBtn.addEventListener('click', () => {
+      if (!historyPagination.has_prev) return;
+      historyPagination.page = Math.max(1, historyPagination.page - 1);
+      loadHistory().catch(error => {
+        showWorkspaceToast(error.message, 'danger');
+      });
+    });
+  }
+
+  if (nextPageBtn) {
+    nextPageBtn.addEventListener('click', () => {
+      if (!historyPagination.has_next) return;
+      historyPagination.page = Math.min(historyPagination.total_pages, historyPagination.page + 1);
+      loadHistory().catch(error => {
+        showWorkspaceToast(error.message, 'danger');
+      });
+    });
+  }
+
+  loadHistory().catch(error => {
+    showWorkspaceToast(error.message, 'danger');
   });
 }

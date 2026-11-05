@@ -9,6 +9,30 @@ $user = requirePageAuth();
 
 workspaceLayoutStart('Panel principal', 'index', $user);
 ?>
+
+<!-- Intro Section -->
+<section class="workspace-intro-shell">
+  <div class="workspace-intro-panel">
+    <div class="workspace-intro-icon" aria-hidden="true">
+      <i class="fas fa-chart-line"></i>
+      <span class="workspace-intro-ripple"></span>
+      <span class="workspace-intro-ripple delay-1"></span>
+    </div>
+
+    <div class="workspace-intro-content">
+      <span class="workspace-tag">Panel principal</span>
+      <h1>Bienvenido de vuelta, <strong><?php echo htmlspecialchars((string) ($user['full_name'] ?? $user['name'] ?? 'Usuario'), ENT_QUOTES, 'UTF-8'); ?></strong></h1>
+      <p>Tu resumen diario ya está listo. Revisa tareas, metas, agenda y notas en un solo vistazo.</p>
+    </div>
+
+    <div class="workspace-intro-actions">
+      <a class="btn btn-primary" href="tasks.php"><i class="fas fa-list-check"></i> Ver tareas</a>
+      <a class="btn btn-outline-light" href="calendar.php"><i class="fas fa-calendar-days"></i> Abrir agenda</a>
+    </div>
+  </div>
+</section>
+
+<!-- Summary Cards -->
 <div class="workspace-cards" id="summaryCards"></div>
 
 <div class="workspace-grid">

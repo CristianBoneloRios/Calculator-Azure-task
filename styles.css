@@ -15,6 +15,8 @@
   --bg-surface:  #0d1117;
   --bg-card:     #131923;
   --bg-card-2:   #1a2232;
+  --surface-2:   #131923;
+  --surface-3:   #1a2232;
   --bg-sidebar:  #0b0f1a;
   --bg-header:   #080c14;
   --bg-hover:    #1f2d40;
@@ -1880,7 +1882,7 @@ a { text-decoration: none; color: inherit; }
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 5px 12px;
   border-radius: 12px;
   background: linear-gradient(135deg, rgba(59,130,246,.12), rgba(139,92,246,.08));
   border: 1px solid rgba(59,130,246,.22);
@@ -1898,18 +1900,18 @@ a { text-decoration: none; color: inherit; }
 }
 
 .about-me-btn-avatar {
-  width: 58px; height: 58px;
+  width: 68px; height: 68px;
   border-radius: 50%;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   display: flex; align-items: center; justify-content: center;
   color: #fff;
-  font-size: 16px;
+  font-size: 19px;
   flex-shrink: 0;
   overflow: hidden;
   border: 2px solid rgba(59,130,246,.4);
 }
 .about-me-btn-avatar img {
-  width: 100%; height: 100%; object-fit: cover;
+  width: 100%; height: 100%; object-fit: cover; object-position: center top;
 }
 
 .about-me-btn-info {
@@ -2741,7 +2743,7 @@ a { text-decoration: none; color: inherit; }
 .azure-filter-group label {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-3);
+  color: #fcd34d;
   text-transform: uppercase;
   letter-spacing: .5px;
   display: flex;
@@ -3804,7 +3806,7 @@ a { text-decoration: none; color: inherit; }
 }
 .azure-filter-group input,
 .azure-filter-group select {
-  background: var(--surface-3);
+  background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--text-1);
@@ -3817,7 +3819,10 @@ a { text-decoration: none; color: inherit; }
 .azure-filter-group select:focus {
   border-color: #0078d4;
 }
-.azure-filter-group select option { background: var(--surface-2); }
+.azure-filter-group select option {
+  background: var(--bg-card-2);
+  color: var(--text-1);
+}
 .azure-filter-actions {
   display: flex;
   gap: 8px;
@@ -4756,6 +4761,217 @@ a { text-decoration: none; color: inherit; }
 .cal-popup-event-meta {
   flex: 1;
   min-width: 0;
+}
+
+/* ═════════════════════════════════════════════════
+   LOGIN — Biometric Authentication
+═════════════════════════════════════════════════ */
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-biometric-section {
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.auth-biometric-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.auth-biometric-section > .auth-muted {
+  margin: 0 0 16px 0;
+  font-size: 13px;
+}
+
+.auth-biometric-status {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+  display: none;
+}
+
+.auth-biometric-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.auth-biometric-indicator i {
+  font-size: 10px;
+  animation: pulse-indicator 2s infinite;
+}
+
+.auth-biometric-disabled {
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 16px;
+  display: none;
+  font-size: 13px;
+  color: #e74c3c;
+  text-align: center;
+}
+
+.auth-biometric-disabled i {
+  margin-right: 8px;
+}
+
+.auth-biometric-disabled small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.auth-biometric-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-biometric-form > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-biometric-form label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.auth-biometric-form input {
+  padding: 10px 14px;
+  background: rgba(17, 24, 39, 0.8);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-1);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.auth-biometric-form input::placeholder {
+  color: var(--text-3);
+}
+
+.auth-biometric-form input:focus {
+  border-color: var(--accent-blue);
+}
+
+.auth-biometric-capture {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 30px 20px;
+  text-align: center;
+  margin: 12px 0;
+}
+
+.auth-biometric-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(6, 182, 212, 0.1));
+  border: 2px solid rgba(59, 130, 246, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: rgba(59, 130, 246, 0.8);
+  animation: pulse-biometric 2s infinite;
+}
+
+.auth-biometric-icon.success {
+  background: linear-gradient(135deg, rgba(39, 174, 96, 0.2), rgba(46, 204, 113, 0.1));
+  border-color: rgba(39, 174, 96, 0.4);
+  color: #27ae60;
+  animation: none;
+}
+
+#loginBiometricPrompt {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.auth-biometric-progress {
+  width: 100%;
+  height: 3px;
+  background: rgba(71, 85, 105, 0.3);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.auth-biometric-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+  width: 0%;
+  transition: width 0.3s ease;
+  border-radius: 2px;
+}
+
+.auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
 }
 
 .cal-popup-event-meta strong {
