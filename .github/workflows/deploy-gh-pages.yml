@@ -1,6 +1,9 @@
 name: Deploy To GitHub Pages
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -18,10 +21,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Prepare static site
+        run: |
+          mkdir -p dist/assets
+          cp index.html app.js normalizer.js styles.css dist/
+          cp assets/profile-photo.svg assets/profile-photo.png dist/assets/
+
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
+          publish_dir: ./dist
           publish_branch: gh-pages
           force_orphan: true
